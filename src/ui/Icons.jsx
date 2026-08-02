@@ -529,6 +529,12 @@ export const CmsIcon = ({ size = 24, className, style }) => (
   </svg>
 );
 
+export const TerminalIcon = (p) => (
+  <I {...p}>
+    <path d="m3 4 3.5 4L3 12M8.5 12H13" />
+  </I>
+);
+
 export const PagePanelIcon = (p) => (
   <I24 {...p}>
     <path

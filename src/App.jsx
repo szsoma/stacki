@@ -14,6 +14,7 @@ import InsertSearch from './ui/InsertSearch.jsx';
 import AssetsPanel from './panels/AssetsPanel.jsx';
 import CmsPanel from './panels/CmsPanel.jsx';
 import CmsView from './panels/CmsView.jsx';
+import TerminalPanel from './panels/TerminalPanel.jsx';
 import { getElementSchema, GLOBAL_ATTRS, canContainTag } from './elementSchemas.js';
 import { onAssetRequest, clearAssetRequest } from './assetPick.js';
 import { isDataBound } from './bindings.js';
@@ -350,7 +351,8 @@ export default function App() {
   const [busy, setBusy] = useState(null); // string message
   const [toast, setToast] = useState(null); // {msg, kind}
   const [refreshKey, setRefreshKey] = useState(0);
-  const [leftTab, setLeftTab] = useState('navigator'); // pages | navigator | components | assets | cms | null
+  const [leftTab, setLeftTab] = useState('navigator'); // pages | navigator | components | assets | cms | terminal | null
+  const [terminalMounted, setTerminalMounted] = useState(false);
   const [cmsRel, setCmsRel] = useState(null); // JSON file open in the CMS editor
   const [cmsTick, setCmsTick] = useState(0); // bumped on save, refreshes counts
   const [cmsSettings, setCmsSettings] = useState(false); // editing that collection's fields
@@ -377,6 +379,11 @@ export default function App() {
   // opening a window over the canvas.
   const [assetPick, setAssetPick] = useState(null);
   const tabBeforePick = useRef(null);
+
+  const selectLeftTab = useCallback((id) => {
+    if (id === 'terminal') setTerminalMounted(true);
+    setLeftTab((current) => (current === id ? null : id));
+  }, []);
 
   // A layout is just a component that lives in src/layouts — it can be
   // placed on a page like any other. Every lookup that answers "what do we
@@ -517,6 +524,7 @@ export default function App() {
     async (projectPath) => {
       const name = projectPath.split(/[\\/]/).filter(Boolean).pop();
       setProject({ path: projectPath, name });
+      setTerminalMounted(false);
       setLeftTab('navigator');
       // Every project opens on desktop — a breakpoint left over from the
       // last project isn't a choice the user made about this one.
@@ -1066,9 +1074,24 @@ export default function App() {
       }
     };
     const offMenu = window.avb.onMenu('insert', openIfEditable);
+    const isCurrentDesignPreview = (event) => {
+      let expectedOrigin;
+      try {
+        expectedOrigin = new URL(devUrl).origin;
+      } catch {
+        return false;
+      }
+      if (event.origin !== expectedOrigin) return false;
+      return [...document.querySelectorAll('.preview-frame-wrap iframe')].some(
+        (iframe) => iframe.contentWindow === event.source
+      );
+    };
     const onMsg = (e) => {
       if (e.data?.type !== 'avb:shortcut') return;
-      if (e.data.name === 'insert') openIfEditable();
+      if (!isCurrentDesignPreview(e)) return;
+      if (e.data.name === 'terminal') {
+        selectLeftTab('terminal');
+      } else if (e.data.name === 'insert') openIfEditable();
       // Arrow keys pressed while the canvas iframe holds focus: replay them
       // on the app window so tree navigation behaves the same whether the
       // selection was made on the canvas or in the navigator.
@@ -1098,7 +1121,7 @@ export default function App() {
       offMenu();
       window.removeEventListener('message', onMsg);
     };
-  }, []);
+  }, [devUrl, selectLeftTab]);
 
   // Where a new node goes: inside the selection when it accepts children,
   // otherwise right after it; with no selection, at the end of the page.
@@ -1219,6 +1242,13 @@ export default function App() {
   // copies, ⌘D duplicates, ⌘V pastes — unless the user is typing in a field.
   useEffect(() => {
     const onKeyDown = (e) => {
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest('.terminal-panel')
+      ) {
+        return;
+      }
       if (cmsOpenRef.current) return;
       const mod = e.metaKey || e.ctrlKey;
 
@@ -1315,14 +1345,28 @@ export default function App() {
         (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
       );
     };
+    const inTerminal = () =>
+      document.activeElement instanceof HTMLElement &&
+      !!document.activeElement.closest('.terminal-panel');
+    const terminalMenu = (action) => {
+      window.dispatchEvent(
+        new CustomEvent('stacki:terminal-menu', { detail: { action } })
+      );
+    };
     const offs = [
       window.avb.onMenu('undo', () => {
+        if (inTerminal()) return;
         if (pageStateRef.current.pageState && !cmsOpenRef.current) undo();
       }),
       window.avb.onMenu('redo', () => {
+        if (inTerminal()) return;
         if (pageStateRef.current.pageState && !cmsOpenRef.current) redo();
       }),
       window.avb.onMenu('copy', () => {
+        if (inTerminal()) {
+          terminalMenu('copy');
+          return;
+        }
         if (inEditable() || String(window.getSelection() || '')) {
           window.avb.nativeCopy();
           return;
@@ -1333,6 +1377,10 @@ export default function App() {
         }
       }),
       window.avb.onMenu('paste', () => {
+        if (inTerminal()) {
+          terminalMenu('paste');
+          return;
+        }
         if (inEditable()) {
           window.avb.nativePaste();
           return;
@@ -2170,12 +2218,13 @@ export default function App() {
       </div>
 
       <div className="main">
-        <LeftRail
-          active={leftTab}
-          onSelect={(id) => setLeftTab((t) => (t === id ? null : id))}
-        />
+        <LeftRail active={leftTab} onSelect={selectLeftTab} />
 
-        {leftTab && (
+        {terminalMounted && (
+          <TerminalPanel key={project.path} active={leftTab === 'terminal'} />
+        )}
+
+        {leftTab && leftTab !== 'terminal' && (
           <div className="panel left">
             {leftTab === 'pages' && (
               <PagesPanel
