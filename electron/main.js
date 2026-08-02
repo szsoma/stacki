@@ -28,6 +28,8 @@ const {
 } = require('./astroParser');
 const { scaffoldProject } = require('./scaffold');
 const { importersOf } = require('./cmsRefs');
+const { TerminalManager } = require('./terminalManager');
+const { registerTerminalIpc } = require('./terminalIpc');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow = null;
@@ -190,11 +192,15 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  terminalManager.dispose({ force: true });
   stopDevServer();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => stopDevServer());
+app.on('before-quit', () => {
+  terminalManager.dispose({ force: true });
+  stopDevServer();
+});
 
 // ---------------------------------------------------------------------------
 // Auto update
@@ -495,6 +501,22 @@ function ensureToolPath() {
   for (const dir of nodeDirGuesses()) if (fs.existsSync(dir)) append(dir);
   process.env.PATH = parts.join(path.delimiter);
 }
+
+const terminalManager = new TerminalManager({
+  send,
+  getProjectRoot: () => openProjectRoot,
+  ensureToolPath,
+});
+
+registerTerminalIpc({
+  ipcMain,
+  manager: terminalManager,
+  isAllowedSender: (event) =>
+    !!mainWindow &&
+    !mainWindow.isDestroyed() &&
+    event.sender === mainWindow.webContents &&
+    event.senderFrame === mainWindow.webContents.mainFrame,
+});
 
 function resolveNodeBin() {
   ensureToolPath();
@@ -1117,7 +1139,11 @@ function markSelfWrite(p) {
 }
 
 ipcMain.handle('watch:start', async (_e, projectPath) => {
-  openProjectRoot = path.resolve(projectPath); // scopes the asset protocol
+  const nextRoot = path.resolve(projectPath);
+  if (openProjectRoot && openProjectRoot !== nextRoot) {
+    terminalManager.dispose();
+  }
+  openProjectRoot = nextRoot; // scopes the asset protocol
   if (watcher) {
     watcher.close();
     watcher = null;
