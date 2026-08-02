@@ -14,6 +14,7 @@ MIT licensed — fork it, build on it, ship your own version.
 - **Props** — the props panel reads each component's `interface Props` / `Astro.props` destructure and generates typed fields (text, number, checkbox). Defaults are shown as placeholders.
 - **Live preview** — the app runs `astro dev` for the opened project and embeds it. Edits are auto-saved (300 ms debounce), so Astro's hot reload updates the preview as you type.
 - **Git & GitHub** — the branch chip in the title bar shows the current branch and dirty state. From its dropdown you can switch branches, create branches, commit, push, or publish a brand-new repo to GitHub (via the `gh` CLI).
+- **Embedded terminal** — open a real project-root shell inside Stacki from the left rail or with `⌥T`. The 480px panel is resizable, and hiding it keeps the running CLI and scrollback alive.
 - **Code fallback** — pages with markup too complex for the visual model open in a code editor instead, still with live preview.
 - **New project** — "New Project…" scaffolds a minimal Astro starter (layout + 5 components + home page) and runs `npm install` for you.
 
@@ -25,6 +26,10 @@ npm run dev
 ```
 
 `npm run dev` starts Vite (renderer hot reload) and launches Electron against it.
+
+The embedded terminal uses the native `node-pty` module. `npm install` runs
+electron-builder's dependency rebuild so the module targets Stacki's Electron
+version rather than the system Node.js version.
 
 To run against a production build of the UI:
 
