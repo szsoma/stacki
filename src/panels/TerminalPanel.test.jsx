@@ -23,6 +23,7 @@ const terminalMocks = vi.hoisted(() => {
     writeln: vi.fn(),
     dispose: vi.fn(),
     getSelection: vi.fn(() => ''),
+    paste: vi.fn((data) => inputHandler(`\x1b[200~${data}\x1b[201~`)),
     onData: vi.fn((handler) => {
       inputHandler = handler;
       return { dispose: inputDispose };
@@ -606,7 +607,7 @@ describe('TerminalPanel sizing and terminal menu', () => {
     expect(handle.getAttribute('aria-valuemax')).toBe('560');
   });
 
-  it('supports terminal-menu copy and paste without launching a CLI command', async () => {
+  it('routes terminal-menu paste through xterm without launching a CLI command', async () => {
     terminal.getSelection.mockReturnValue('selected text');
     render(<TerminalPanel active />);
     await waitFor(() => expect(window.avb.startTerminal).toHaveBeenCalled());
@@ -627,9 +628,10 @@ describe('TerminalPanel sizing and terminal menu', () => {
         }),
       );
     });
+    expect(terminal.paste).toHaveBeenCalledWith('pasted');
     expect(window.avb.writeTerminal).toHaveBeenCalledWith({
       sessionId: 'session-1',
-      data: 'pasted',
+      data: '\x1b[200~pasted\x1b[201~',
     });
     expect(window.avb.startTerminal).toHaveBeenCalledWith({
       cols: 100,

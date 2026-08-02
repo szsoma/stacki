@@ -371,10 +371,7 @@ export default function TerminalPanel({ active }) {
         ) {
           const data = await navigator.clipboard.readText();
           if (data) {
-            window.avb.writeTerminal({
-              sessionId: sessionRef.current,
-              data,
-            });
+            terminal.paste(data);
           }
         }
       } catch (error) {
