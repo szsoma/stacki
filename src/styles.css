@@ -904,6 +904,55 @@ textarea { font-family: inherit; font-size: 12px; line-height: 1.5; resize: none
 .panel.left { width: 260px; flex-shrink: 0; }
 .panel.right { width: 322px; flex-shrink: 0; border-right: none; border-left: 1px solid var(--border); }
 
+.terminal-panel {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #111;
+}
+.terminal-panel[hidden] { display: none; }
+.terminal-header {
+  height: 52px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+.terminal-header h2 {
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 650;
+  color: var(--text);
+}
+.terminal-surface {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 10px 10px 14px;
+  overflow: hidden;
+  background: #111;
+}
+.terminal-surface .xterm { height: 100%; }
+.terminal-surface .xterm-viewport { scrollbar-width: thin; }
+.terminal-resize-handle {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+}
+.terminal-resize-handle:hover,
+.terminal-resize-handle:active,
+.terminal-resize-handle:focus-visible {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.terminal-resize-handle:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .panel-section { display: flex; flex-direction: column; min-height: 0; }
 .panel-section + .panel-section { border-top: 1px solid var(--border); }
 .panel-section.grow { flex: 1; }
