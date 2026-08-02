@@ -80,6 +80,7 @@ class TerminalManager {
       dataSubscription: null,
       exitSubscription: null,
       killTimer: null,
+      finalKillSent: false,
     };
     this.child = child;
     this.sessionId = sessionId;
@@ -163,12 +164,12 @@ class TerminalManager {
     this.terminatingSessions.add(session);
 
     if (this.platform === 'win32') {
-      session.child.kill();
+      this.forceTerminateSession(session);
       return;
     }
 
     if (force) {
-      session.child.kill('SIGKILL');
+      this.forceTerminateSession(session);
       return;
     }
 
@@ -178,9 +179,25 @@ class TerminalManager {
     session.killTimer = this.setTimeoutFn(() => {
       if (session.state !== 'terminating') return;
       session.killTimer = null;
-      session.child.kill('SIGKILL');
+      this.forceTerminateSession(session);
     }, this.killTimeoutMs);
     session.killTimer?.unref?.();
+  }
+
+  forceTerminateSession(session) {
+    if (session.state !== 'terminating' || session.finalKillSent) return false;
+
+    if (session.killTimer) {
+      this.clearTimeoutFn(session.killTimer);
+      session.killTimer = null;
+    }
+    session.finalKillSent = true;
+    if (this.platform === 'win32') {
+      session.child.kill();
+    } else {
+      session.child.kill('SIGKILL');
+    }
+    return true;
   }
 
   dispose({ sessionId, force = false } = {}) {
@@ -190,6 +207,11 @@ class TerminalManager {
     this.child = null;
     this.sessionId = null;
     if (session) this.terminateSession(session, { force });
+    if (force) {
+      for (const terminatingSession of this.terminatingSessions) {
+        this.forceTerminateSession(terminatingSession);
+      }
+    }
     return true;
   }
 }

@@ -239,6 +239,33 @@ describe('TerminalManager', () => {
     expect(children[0].exitDispose).toHaveBeenCalledTimes(1);
   });
 
+  it('force-disposes all pending POSIX shells once and cancels their timers', () => {
+    const { manager, children, timers, clearTimeoutFn } = setup();
+    manager.start({ cols: 80, rows: 24 });
+    manager.dispose({ sessionId: 'session-1' });
+    manager.start({ cols: 90, rows: 28 });
+    manager.dispose({ sessionId: 'session-2' });
+
+    expect(timers).toHaveLength(2);
+    manager.dispose({ force: true });
+
+    expect(children[0].kill.mock.calls).toEqual([['SIGHUP'], ['SIGKILL']]);
+    expect(children[1].kill.mock.calls).toEqual([['SIGHUP'], ['SIGKILL']]);
+    expect(clearTimeoutFn).toHaveBeenCalledWith(timers[0]);
+    expect(clearTimeoutFn).toHaveBeenCalledWith(timers[1]);
+
+    manager.dispose({ force: true });
+    timers[0].callback();
+    timers[1].callback();
+    expect(children[0].kill).toHaveBeenCalledTimes(2);
+    expect(children[1].kill).toHaveBeenCalledTimes(2);
+
+    children[0].emitExit({ exitCode: 0, signal: 9 });
+    children[1].emitExit({ exitCode: 0, signal: 9 });
+    expect(children[0].exitDispose).toHaveBeenCalledTimes(1);
+    expect(children[1].exitDispose).toHaveBeenCalledTimes(1);
+  });
+
   it('force-disposes a Windows shell without an unsupported signal', () => {
     const { manager, children, setTimeoutFn } = setup({
       platform: 'win32',
