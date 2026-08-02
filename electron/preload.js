@@ -44,6 +44,7 @@ if (!process.isMainFrame) {
           e.code === 'KeyT';
         if (terminalShortcut) {
           e.preventDefault();
+          e.stopImmediatePropagation();
           try {
             window.parent.postMessage({ type: 'avb:shortcut', name: 'terminal' }, '*');
           } catch {

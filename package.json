@@ -16,7 +16,7 @@
     "dist:mac:unsigned": "npm run build && electron-builder --mac -c.mac.forceCodeSigning=false -c.mac.notarize=false -c.mac.identity=null",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:electron": "node --check electron/main.js && node --check electron/preload.js && node --check electron/terminalManager.js && node --check electron/terminalIpc.js",
+    "check:electron": "node --check electron/main.js && node --check electron/preload.js && node --check electron/mainPolicy.js && node --check electron/terminalManager.js && node --check electron/terminalIpc.js",
     "postinstall": "node scripts/install-app-deps.cjs"
   },
   "dependencies": {
