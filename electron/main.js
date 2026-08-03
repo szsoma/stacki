@@ -28,6 +28,9 @@ const {
 } = require('./astroParser');
 const { scaffoldProject } = require('./scaffold');
 const { importersOf } = require('./cmsRefs');
+const { TerminalManager } = require('./terminalManager');
+const { registerTerminalIpc } = require('./terminalIpc');
+const { createTrustedRendererMatcher, transitionProjectRoot } = require('./mainPolicy');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow = null;
@@ -47,7 +50,7 @@ const isWin = process.platform === 'win32';
 // ---------------------------------------------------------------------------
 
 const ASSET_SCHEME = 'stacki-asset';
-let openProjectRoot = null; // set when a project's watcher starts
+let openProjectRoot = null; // set when a project is scanned or its watcher starts
 
 // Must run before the app is ready.
 protocol.registerSchemesAsPrivileged([
@@ -93,6 +96,11 @@ async function serveFile(abs, request) {
 // ---------------------------------------------------------------------------
 
 const resource = (name) => path.join(__dirname, '..', 'resources', name);
+const rendererEntryPath = path.join(__dirname, '..', 'dist', 'index.html');
+const isTrustedRendererUrl = createTrustedRendererMatcher({
+  devServerUrl: process.env.VITE_DEV_SERVER_URL,
+  packagedEntryPath: rendererEntryPath,
+});
 
 // electron-builder stamps the icon onto packaged builds (build.mac.icon), but
 // `npm run dev` runs the bare Electron binary, which shows its own icon in the
@@ -127,10 +135,20 @@ function createWindow() {
     },
   });
 
+  const guardTrustedNavigation = (event, legacyUrl, _legacyIsInPlace, legacyIsMainFrame) => {
+    const isMainFrame =
+      typeof event.isMainFrame === 'boolean' ? event.isMainFrame : legacyIsMainFrame !== false;
+    if (!isMainFrame) return;
+    const navigationUrl = typeof event.url === 'string' ? event.url : legacyUrl;
+    if (!isTrustedRendererUrl(navigationUrl)) event.preventDefault();
+  };
+  mainWindow.webContents.on('will-navigate', guardTrustedNavigation);
+  mainWindow.webContents.on('will-redirect', guardTrustedNavigation);
+
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    mainWindow.loadFile(rendererEntryPath);
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -190,11 +208,15 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  terminalManager.dispose({ force: true });
   stopDevServer();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => stopDevServer());
+app.on('before-quit', () => {
+  terminalManager.dispose({ force: true });
+  stopDevServer();
+});
 
 // ---------------------------------------------------------------------------
 // Auto update
@@ -495,6 +517,32 @@ function ensureToolPath() {
   for (const dir of nodeDirGuesses()) if (fs.existsSync(dir)) append(dir);
   process.env.PATH = parts.join(path.delimiter);
 }
+
+const terminalManager = new TerminalManager({
+  send,
+  getProjectRoot: () => openProjectRoot,
+  ensureToolPath,
+});
+
+function setOpenProjectRoot(projectPath) {
+  openProjectRoot = transitionProjectRoot({
+    currentRoot: openProjectRoot,
+    projectPath,
+    disposeTerminal: () => terminalManager.dispose(),
+  });
+  return openProjectRoot;
+}
+
+registerTerminalIpc({
+  ipcMain,
+  manager: terminalManager,
+  isAllowedSender: (event) =>
+    !!mainWindow &&
+    !mainWindow.isDestroyed() &&
+    event.sender === mainWindow.webContents &&
+    event.senderFrame === mainWindow.webContents.mainFrame &&
+    isTrustedRendererUrl(event.senderFrame.url),
+});
 
 function resolveNodeBin() {
   ensureToolPath();
@@ -871,8 +919,8 @@ ipcMain.handle('project:install', async (_e, projectPath) => {
 ipcMain.handle('project:scan', async (_e, projectPath) => {
   // Also set here, not just in watch:start — the Assets panel can render
   // thumbnails before the watcher starts, and they'd be refused.
-  openProjectRoot = path.resolve(projectPath);
-  const src = path.join(projectPath, 'src');
+  const projectRoot = setOpenProjectRoot(projectPath);
+  const src = path.join(projectRoot, 'src');
   const pagesDir = path.join(src, 'pages');
   const layoutsDir = path.join(src, 'layouts');
   const componentsDir = path.join(src, 'components');
@@ -880,7 +928,7 @@ ipcMain.handle('project:scan', async (_e, projectPath) => {
   const pages = listAstroFiles(pagesDir).map((p) => ({
     path: p,
     name: toPosix(path.relative(pagesDir, p)),
-    route: routeForPage(projectPath, p),
+    route: routeForPage(projectRoot, p),
   }));
 
   // Folders under src/pages (including empty ones) for the pages tree.
@@ -906,14 +954,14 @@ ipcMain.handle('project:scan', async (_e, projectPath) => {
     name: path.basename(p, '.astro'),
     folder: toPosix(path.relative(src, path.dirname(p))),
     isLayout: true,
-    ...safeSchema(p, projectPath),
+    ...safeSchema(p, projectRoot),
   }));
 
   const components = listAstroFiles(componentsDir).map((p) => ({
     path: p,
     name: path.basename(p, '.astro'),
     folder: toPosix(path.relative(componentsDir, path.dirname(p))),
-    ...safeSchema(p, projectPath),
+    ...safeSchema(p, projectRoot),
   }));
 
   // Instance counts: how often each component is used across every .astro
@@ -1117,12 +1165,12 @@ function markSelfWrite(p) {
 }
 
 ipcMain.handle('watch:start', async (_e, projectPath) => {
-  openProjectRoot = path.resolve(projectPath); // scopes the asset protocol
+  const projectRoot = setOpenProjectRoot(projectPath); // scopes the asset protocol
   if (watcher) {
     watcher.close();
     watcher = null;
   }
-  const srcDir = path.join(projectPath, 'src');
+  const srcDir = path.join(projectRoot, 'src');
   if (!fs.existsSync(srcDir)) return { ok: false };
 
   let pending = new Set();
@@ -1160,7 +1208,7 @@ ipcMain.handle('watch:start', async (_e, projectPath) => {
     assetsWatcher.close();
     assetsWatcher = null;
   }
-  const publicDir = path.join(projectPath, 'public');
+  const publicDir = path.join(projectRoot, 'public');
   if (fs.existsSync(publicDir)) {
     let assetsTimer = null;
     assetsWatcher = fs.watch(publicDir, { recursive: true }, (_event, filename) => {

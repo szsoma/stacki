@@ -10,5 +10,11 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    minify: 'terser',
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+    clearMocks: true,
   },
 });

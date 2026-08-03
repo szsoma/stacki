@@ -36,6 +36,22 @@ if (!process.isMainFrame) {
     window.addEventListener(
       'keydown',
       (e) => {
+        const terminalShortcut =
+          e.altKey &&
+          !e.metaKey &&
+          !e.ctrlKey &&
+          !e.shiftKey &&
+          e.code === 'KeyT';
+        if (terminalShortcut) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          try {
+            window.parent.postMessage({ type: 'avb:shortcut', name: 'terminal' }, '*');
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
         const mod = e.metaKey || e.ctrlKey;
         if (mod && (e.key.toLowerCase() === 'f' || e.key.toLowerCase() === 'e')) {
           e.preventDefault();
@@ -510,6 +526,28 @@ contextBridge.exposeInMainWorld('avb', {
   scanProject: invoke('project:scan'),
   listProjectClasses: invoke('project:classes'),
   watchProject: invoke('watch:start'),
+
+  // Embedded project terminal
+  startTerminal: invoke('terminal:start'),
+  restartTerminal: invoke('terminal:restart'),
+  disposeTerminal: invoke('terminal:dispose'),
+  writeTerminal: (payload) => ipcRenderer.send('terminal:input', payload),
+  resizeTerminal: (payload) => ipcRenderer.send('terminal:resize', payload),
+  onTerminalData: (cb) => {
+    const listener = (_event, payload) => cb(payload);
+    ipcRenderer.on('terminal:data', listener);
+    return () => ipcRenderer.removeListener('terminal:data', listener);
+  },
+  onTerminalExit: (cb) => {
+    const listener = (_event, payload) => cb(payload);
+    ipcRenderer.on('terminal:exit', listener);
+    return () => ipcRenderer.removeListener('terminal:exit', listener);
+  },
+  onTerminalError: (cb) => {
+    const listener = (_event, payload) => cb(payload);
+    ipcRenderer.on('terminal:error', listener);
+    return () => ipcRenderer.removeListener('terminal:error', listener);
+  },
 
   // Assets (public/)
   listAssets: invoke('assets:list'),

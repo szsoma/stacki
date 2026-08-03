@@ -5,7 +5,9 @@ import {
   ComponentFillIcon,
   AssetManagerIcon,
   CmsIcon,
+  TerminalIcon,
 } from './Icons.jsx';
+import { isTerminalShortcut } from '../terminal/terminalLogic.js';
 
 const TABS = [
   { id: 'pages', title: 'Pages', shortcut: 'P', Icon: PagePanelIcon },
@@ -13,6 +15,7 @@ const TABS = [
   { id: 'components', title: 'Components', shortcut: '⇧A', Icon: ComponentFillIcon },
   { id: 'assets', title: 'Assets', shortcut: 'J', Icon: AssetManagerIcon },
   { id: 'cms', title: 'CMS', shortcut: '⌥C', Icon: CmsIcon },
+  { id: 'terminal', title: 'Terminal', shortcut: '⌥T', Icon: TerminalIcon },
 ];
 
 const TOOLTIP_DELAY = 500;
@@ -39,10 +42,17 @@ export default function LeftRail({ active, onSelect }) {
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
-  // P / Z / ⇧A / J / ⌥C toggle the panels (ignored while typing in a field).
+  // P / Z / ⇧A / J / ⌥C toggle the editor panels. ⌥T is reserved for the
+  // terminal even while a field has focus, so CLI access stays predictable.
   useEffect(() => {
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey) return;
+      if (isTerminalShortcut(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        onSelect('terminal');
+        return;
+      }
       const t = e.target;
       if (
         t instanceof HTMLElement &&
@@ -69,17 +79,20 @@ export default function LeftRail({ active, onSelect }) {
         onSelect(id);
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [onSelect]);
 
   const tipTab = tip && TABS.find((t) => t.id === tip.id);
 
   return (
     <div className="rail">
-      {TABS.map(({ id, Icon }) => (
+      {TABS.map(({ id, title, Icon }) => (
         <button
           key={id}
+          type="button"
+          aria-label={title}
+          aria-pressed={active === id}
           className={`rail-btn ${active === id ? 'on' : ''}`}
           onMouseEnter={showSoon(id)}
           onMouseLeave={hide}
