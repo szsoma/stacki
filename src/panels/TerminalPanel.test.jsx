@@ -10,6 +10,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import TerminalPanel from './TerminalPanel.jsx';
 
+expect.extend({
+  toHaveClass(element, className) {
+    const pass = element?.classList?.contains(className);
+    return {
+      pass,
+      message: () =>
+        'expected element ' +
+        (pass ? 'not ' : '') +
+        'to have class "' +
+        className +
+        '"',
+    };
+  },
+});
+
 const terminalMocks = vi.hoisted(() => {
   let inputHandler = () => {};
   const inputDispose = vi.fn();
@@ -159,6 +174,13 @@ beforeEach(() => {
 });
 
 describe('TerminalPanel lifecycle', () => {
+  it('renders the title inside the terminal header', () => {
+    render(<TerminalPanel active={false} />);
+    const title = screen.getByRole('heading', { name: 'Terminal', hidden: true });
+    expect(title.parentElement).toHaveClass('terminal-header');
+    expect(title.tagName).toBe('H2');
+  });
+
   it('does not initialize while hidden, then starts one shell and focuses when opened', async () => {
     const view = render(<TerminalPanel active={false} />);
 

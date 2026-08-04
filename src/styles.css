@@ -920,10 +920,10 @@ textarea { font-family: inherit; font-size: 12px; line-height: 1.5; resize: none
   border-bottom: 1px solid var(--border);
 }
 .terminal-header h2 {
-  font-size: 18px;
-  line-height: 1;
-  font-weight: 650;
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--text);
+  letter-spacing: 0.01em;
 }
 .terminal-surface {
   flex: 1;
