@@ -24,15 +24,8 @@ function declarationsFor(selector) {
 describe('terminal title styles', () => {
   it('keeps the terminal title typography aligned with the CMS title', () => {
     const terminalTitle = declarationsFor('\\.terminal-header h2');
-    const cmsTitle = declarationsFor('\\.panel-header h2');
+    const panelTitle = declarationsFor('\\.panel-header h2');
 
-    for (const property of [
-      'font-size',
-      'font-weight',
-      'color',
-      'letter-spacing',
-    ]) {
-      expect(terminalTitle[property]).toBe(cmsTitle[property]);
-    }
+    expect(terminalTitle).toEqual(panelTitle);
   });
 });
