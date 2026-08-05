@@ -1995,6 +1995,20 @@ export default function App() {
           : null
         : codeWinNode?.inner ?? null;
 
+  // What the "Current file" context chip attaches: whatever the floating
+  // code editor currently has open (a public/ asset file, frontmatter, or a
+  // raw <script>/<style> block), normalized to one shape so the resolver
+  // doesn't need to know about codeWin's internal variants.
+  const currentFileContext =
+    codeWin && codeWinValue !== null
+      ? {
+          path: isFileWin ? codeWin.rel : (currentPage?.path ?? null),
+          title: codeWin.title,
+          language: codeWin.language,
+          content: codeWinValue,
+        }
+      : null;
+
   // Returns whether the selection actually has a code editor, so the Enter
   // shortcut below knows whether it handled the key.
   const openCodeWindow = () => {
@@ -2221,7 +2235,12 @@ export default function App() {
         <LeftRail active={leftTab} onSelect={selectLeftTab} />
 
         {terminalMounted && (
-          <TerminalPanel key={project.path} active={leftTab === 'terminal'} />
+          <TerminalPanel
+            key={project.path}
+            active={leftTab === 'terminal'}
+            currentFile={currentFileContext}
+            projectPath={project.path}
+          />
         )}
 
         {leftTab && leftTab !== 'terminal' && (
