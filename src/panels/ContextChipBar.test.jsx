@@ -1,0 +1,63 @@
+import React from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import ContextChipBar from './ContextChipBar.jsx';
+
+beforeEach(() => {
+  window.avb = {
+    listContextFiles: vi.fn(async () => ({ files: ['src/pages/index.astro'] })),
+    readContextFile: vi.fn(async ({ rel }) => ({ rel, content: `content of ${rel}`, size: 10 })),
+  };
+});
+
+describe('ContextChipBar', () => {
+  it('offers Current file only when a file is open, and adds it as a ready chip', async () => {
+    render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
+    fireEvent.click(screen.getByText('+ Add context'));
+    expect(screen.queryByText('Current file')).not.toBeInTheDocument();
+    expect(screen.getByText('Selected files')).toBeInTheDocument();
+  });
+
+  it('adds the current file as a chip and includes it in the composed prompt', async () => {
+    render(
+      <ContextChipBar
+        currentFile={{ path: 'src/pages/index.astro', title: 'Frontmatter', language: 'javascript', content: 'const x = 1;' }}
+        projectPath="/projects/site"
+      />,
+    );
+    fireEvent.click(screen.getByText('+ Add context'));
+    fireEvent.click(screen.getByText('Current file'));
+    await waitFor(() => expect(screen.getByText('Current file')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('Ask Codex to…'), { target: { value: 'Fix the spacing.' } });
+
+    const listener = vi.fn();
+    window.addEventListener('stacki:terminal-menu', listener);
+    fireEvent.click(screen.getByRole('button', { name: 'Insert into terminal' }));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].detail.action).toBe('insert');
+    expect(listener.mock.calls[0][0].detail.text).toContain('const x = 1;');
+    expect(listener.mock.calls[0][0].detail.text).toContain('Fix the spacing.');
+    window.removeEventListener('stacki:terminal-menu', listener);
+  });
+
+  it('adds selected files through the file picker', async () => {
+    render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
+    fireEvent.click(screen.getByText('+ Add context'));
+    fireEvent.click(screen.getByText('Selected files'));
+    await waitFor(() => expect(screen.getByText('src/pages/index.astro')).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText('src/pages/index.astro'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1 file' }));
+
+    await waitFor(() => expect(screen.getByText('Selected files')).toBeInTheDocument());
+    expect(window.avb.readContextFile).toHaveBeenCalledWith({
+      projectPath: '/projects/site',
+      rel: 'src/pages/index.astro',
+    });
+  });
+
+  it('disables Insert into terminal until there is prompt text', () => {
+    render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
+    expect(screen.getByRole('button', { name: 'Insert into terminal' })).toBeDisabled();
+  });
+});
