@@ -40,6 +40,7 @@ function listProjectFiles(root, { fs = nodeFs, path = nodePath } = {}) {
     }
     for (const entry of entries) {
       if (entry.name.startsWith('.') && entry.name !== '.') continue;
+      if (!entry.isDirectory() && isSensitiveFilename(entry.name)) continue;
       if (entry.isDirectory()) {
         if (EXCLUDED_DIRS.has(entry.name)) continue;
         walk(path.join(dir, entry.name), rel ? `${rel}/${entry.name}` : entry.name);

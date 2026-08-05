@@ -20,7 +20,7 @@ describe('ContextDetailsPopover', () => {
     render(
       <ContextDetailsPopover
         snapshot={snapshot()}
-        markdown="### Current file\n\nconst x = 1;"
+        markdown={'### Current file\n\nconst x = 1;'}
         onRefresh={vi.fn()}
         onRemove={vi.fn()}
         onClose={vi.fn()}
@@ -28,7 +28,11 @@ describe('ContextDetailsPopover', () => {
     );
     expect(screen.getByText('Current file')).toBeInTheDocument();
     expect(screen.getByText(/~42 tokens/)).toBeInTheDocument();
-    expect(screen.getByText(/const x = 1;/)).toBeInTheDocument();
+    // A plain quoted JSX attribute leaves "\n" as two literal characters,
+    // not a newline — asserting on the preview's full (real) text content,
+    // rather than just a substring match, is what would have caught that.
+    const preview = screen.getByText(/const x = 1;/);
+    expect(preview.textContent).toBe('### Current file\n\nconst x = 1;');
   });
 
   it('shows the error message for a failed snapshot instead of a preview', () => {

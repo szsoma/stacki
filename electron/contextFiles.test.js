@@ -101,6 +101,22 @@ describe('listProjectFiles', () => {
     const files = listProjectFiles('/project', { fs, path });
     expect(files).toEqual(['package.json', 'src/pages/index.astro']);
   });
+
+  it('excludes sensitive filenames that are not dotfiles, so they never appear as pickable', () => {
+    const { fs, path } = fakeFs({
+      'credentials.json': { type: 'file', content: '{"key":"secret"}' },
+      'server.pem': { type: 'file', content: 'PEM DATA' },
+      'id_rsa': { type: 'file', content: 'PRIVATE KEY' },
+      'service-account-1.json': { type: 'file', content: '{}' },
+      'config': { type: 'dir', children: {
+        'service-account-prod.json': { type: 'file', content: '{}' },
+      } },
+      'package.json': { type: 'file', content: '{}' },
+    });
+
+    const files = listProjectFiles('/project', { fs, path });
+    expect(files).toEqual(['package.json']);
+  });
 });
 
 describe('readProjectFile', () => {
