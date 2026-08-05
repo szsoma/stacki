@@ -549,6 +549,10 @@ contextBridge.exposeInMainWorld('avb', {
     return () => ipcRenderer.removeListener('terminal:error', listener);
   },
 
+  // Terminal context chips
+  listContextFiles: invoke('context:listFiles'),
+  readContextFile: invoke('context:readFile'),
+
   // Assets (public/)
   listAssets: invoke('assets:list'),
   pickUploadAssets: invoke('assets:pickUpload'),

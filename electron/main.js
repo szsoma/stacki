@@ -30,6 +30,7 @@ const { scaffoldProject } = require('./scaffold');
 const { importersOf } = require('./cmsRefs');
 const { TerminalManager } = require('./terminalManager');
 const { registerTerminalIpc } = require('./terminalIpc');
+const { registerContextIpc } = require('./contextIpc');
 const { createTrustedRendererMatcher, transitionProjectRoot } = require('./mainPolicy');
 const { autoUpdater } = require('electron-updater');
 
@@ -542,6 +543,17 @@ registerTerminalIpc({
     event.sender === mainWindow.webContents &&
     event.senderFrame === mainWindow.webContents.mainFrame &&
     isTrustedRendererUrl(event.senderFrame.url),
+});
+
+registerContextIpc({
+  ipcMain,
+  isAllowedSender: (event) =>
+    !!mainWindow &&
+    !mainWindow.isDestroyed() &&
+    event.sender === mainWindow.webContents &&
+    event.senderFrame === mainWindow.webContents.mainFrame &&
+    isTrustedRendererUrl(event.senderFrame.url),
+  getProjectRoot: () => openProjectRoot,
 });
 
 function resolveNodeBin() {
