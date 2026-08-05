@@ -155,6 +155,8 @@ beforeEach(() => {
       errorHandler = handler;
       return offError;
     }),
+    listContextFiles: vi.fn(async () => ({ files: [] })),
+    readContextFile: vi.fn(async ({ rel }) => ({ rel, content: '', size: 0 })),
   };
 });
 
@@ -645,5 +647,21 @@ describe('TerminalPanel sizing and terminal menu', () => {
       rows: 30,
     });
     expect(window.avb.startTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  it('inserts composed context text without touching the clipboard', async () => {
+    render(<TerminalPanel active />);
+    await waitFor(() => expect(window.avb.startTerminal).toHaveBeenCalled());
+
+    window.dispatchEvent(
+      new CustomEvent('stacki:terminal-menu', {
+        detail: { action: 'insert', text: '## User request\n\nFix the spacing.' },
+      }),
+    );
+
+    await waitFor(() =>
+      expect(terminal.paste).toHaveBeenCalledWith('## User request\n\nFix the spacing.'),
+    );
+    expect(navigator.clipboard.readText).not.toHaveBeenCalled();
   });
 });

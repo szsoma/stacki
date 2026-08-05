@@ -14,6 +14,7 @@ import {
   TERMINAL_MIN_WIDTH,
   clampTerminalWidth,
 } from '../terminal/terminalLogic.js';
+import ContextChipBar from './ContextChipBar.jsx';
 
 const RAIL_WIDTH = 44;
 const KEYBOARD_RESIZE_STEP = 16;
@@ -32,7 +33,7 @@ function requestTerminalDisposal(sessionId) {
   }
 }
 
-export default function TerminalPanel({ active }) {
+export default function TerminalPanel({ active, currentFile, projectPath }) {
   const panelRef = useRef(null);
   const hostRef = useRef(null);
   const terminalRef = useRef(null);
@@ -365,6 +366,16 @@ export default function TerminalPanel({ active }) {
         }
 
         if (
+          event.detail?.action === 'insert' &&
+          sessionRef.current &&
+          !exitedRef.current &&
+          typeof event.detail.text === 'string'
+        ) {
+          terminal.paste(event.detail.text);
+          return;
+        }
+
+        if (
           event.detail?.action === 'paste' &&
           sessionRef.current &&
           !exitedRef.current
@@ -463,6 +474,7 @@ export default function TerminalPanel({ active }) {
       <header className="terminal-header">
         <h2>Terminal</h2>
       </header>
+      <ContextChipBar currentFile={currentFile} projectPath={projectPath} />
       <div className="terminal-surface" ref={hostRef} />
       <div
         className="terminal-resize-handle"
