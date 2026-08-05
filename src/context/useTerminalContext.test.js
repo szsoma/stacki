@@ -150,4 +150,41 @@ describe('useTerminalContext', () => {
     expect(result.current.prompt).toBe('');
     window.removeEventListener('stacki:terminal-menu', listener);
   });
+
+  it('does not clear the prompt when nothing was there to receive the insert', async () => {
+    registerResolver(fakeResolver());
+    const { result } = renderHook(() => useTerminalContext({ currentFile: null, projectPath: null }));
+
+    act(() => {
+      result.current.setPrompt('Fix the spacing.');
+    });
+    act(() => {
+      result.current.addChip('fake-a');
+    });
+    await waitFor(() => expect(result.current.chips[0].status).toBe(CONTEXT_CHIP_STATUS.READY));
+
+    // Simulate TerminalPanel's handler: no live shell session, so it cancels
+    // the event instead of pasting.
+    const preventingListener = vi.fn((event) => event.preventDefault());
+    window.addEventListener('stacki:terminal-menu', preventingListener);
+    act(() => {
+      result.current.insertIntoTerminal();
+    });
+    expect(preventingListener).toHaveBeenCalledTimes(1);
+    expect(result.current.prompt).toBe('Fix the spacing.');
+    window.removeEventListener('stacki:terminal-menu', preventingListener);
+  });
+
+  it('dispatches a cancelable event', async () => {
+    registerResolver(fakeResolver());
+    const { result } = renderHook(() => useTerminalContext({ currentFile: null, projectPath: null }));
+
+    const listener = vi.fn();
+    window.addEventListener('stacki:terminal-menu', listener);
+    act(() => {
+      result.current.insertIntoTerminal();
+    });
+    expect(listener.mock.calls[0][0].cancelable).toBe(true);
+    window.removeEventListener('stacki:terminal-menu', listener);
+  });
 });

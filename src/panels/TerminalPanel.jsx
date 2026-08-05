@@ -356,7 +356,10 @@ export default function TerminalPanel({ active, currentFile, projectPath }) {
   useEffect(() => {
     const onMenu = async (event) => {
       const terminal = terminalRef.current;
-      if (!terminal) return;
+      if (!terminal) {
+        if (event.detail?.action === 'insert') event.preventDefault();
+        return;
+      }
 
       try {
         if (event.detail?.action === 'copy') {
@@ -365,12 +368,14 @@ export default function TerminalPanel({ active, currentFile, projectPath }) {
           return;
         }
 
-        if (
-          event.detail?.action === 'insert' &&
-          sessionRef.current &&
-          !exitedRef.current &&
-          typeof event.detail.text === 'string'
-        ) {
+        if (event.detail?.action === 'insert' && typeof event.detail.text === 'string') {
+          // No live shell session to paste into (not started yet, or the
+          // shell exited) — tell the caller the text was NOT delivered so it
+          // knows not to discard what the user typed.
+          if (!sessionRef.current || exitedRef.current) {
+            event.preventDefault();
+            return;
+          }
           terminal.paste(event.detail.text);
           return;
         }

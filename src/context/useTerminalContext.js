@@ -94,12 +94,19 @@ export function useTerminalContext(appState) {
   );
 
   const insertIntoTerminal = useCallback(() => {
-    window.dispatchEvent(
-      new CustomEvent('stacki:terminal-menu', {
-        detail: { action: 'insert', text: composedMarkdown },
-      }),
-    );
-    setPrompt('');
+    // `dispatchEvent` runs listeners synchronously, so TerminalPanel's
+    // handler has already run (and called `preventDefault()` if it couldn't
+    // actually paste — no live shell session) by the time this returns.
+    // Only clear the prompt when the text was really delivered, or the
+    // user's typed request is silently lost the moment the shell exits.
+    const event = new CustomEvent('stacki:terminal-menu', {
+      cancelable: true,
+      detail: { action: 'insert', text: composedMarkdown },
+    });
+    window.dispatchEvent(event);
+    if (!event.defaultPrevented) {
+      setPrompt('');
+    }
   }, [composedMarkdown]);
 
   return {

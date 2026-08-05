@@ -664,4 +664,23 @@ describe('TerminalPanel sizing and terminal menu', () => {
     );
     expect(navigator.clipboard.readText).not.toHaveBeenCalled();
   });
+
+  it('cancels an insert instead of discarding it when the terminal has exited', async () => {
+    render(<TerminalPanel active />);
+    await waitFor(() => expect(window.avb.startTerminal).toHaveBeenCalled());
+
+    emitTerminalExit({ sessionId: 'session-1', exitCode: 0, signal: 0 });
+    terminal.paste.mockClear();
+
+    const event = new CustomEvent('stacki:terminal-menu', {
+      cancelable: true,
+      detail: { action: 'insert', text: 'Fix the spacing.' },
+    });
+    await act(async () => {
+      window.dispatchEvent(event);
+    });
+
+    expect(terminal.paste).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(true);
+  });
 });
