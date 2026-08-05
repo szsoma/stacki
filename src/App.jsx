@@ -333,6 +333,21 @@ function stripLostBindings(node, vars) {
   return removed;
 }
 
+// Strips the project root off an absolute filesystem path so it reads like
+// the project-relative paths the Selected Files chip already uses (and so a
+// prompt heading into the terminal never leaks the user's home directory).
+// Both paths are produced by Node's `path` module in the main process on the
+// same OS as the renderer, so they share the same separator convention.
+function toProjectRelativePath(absolutePath, projectRoot) {
+  if (!absolutePath) return null;
+  if (!projectRoot) return absolutePath;
+  let rel = absolutePath;
+  if (rel.startsWith(projectRoot)) {
+    rel = rel.slice(projectRoot.length);
+  }
+  return rel.replace(/^[\\/]+/, '');
+}
+
 export default function App() {
   const [project, setProject] = useState(null); // {path, name}
   const [scan, setScan] = useState({ pages: [], layouts: [], components: [] });
@@ -1998,14 +2013,20 @@ export default function App() {
   // What the "Current file" context chip attaches: whatever the floating
   // code editor currently has open (a public/ asset file, frontmatter, or a
   // raw <script>/<style> block), normalized to one shape so the resolver
-  // doesn't need to know about codeWin's internal variants.
+  // doesn't need to know about codeWin's internal variants. Asset files are
+  // whole files (`kind: 'file'`); frontmatter/raw-node windows only hold a
+  // fragment of `currentPage`'s file (`kind: 'fragment'`), so the resolver
+  // can warn that it isn't the complete file.
   const currentFileContext =
     codeWin && codeWinValue !== null
       ? {
-          path: isFileWin ? codeWin.rel : (currentPage?.path ?? null),
+          path: isFileWin
+            ? `public/${codeWin.rel}`
+            : toProjectRelativePath(currentPage?.path ?? null, project?.path ?? null),
           title: codeWin.title,
           language: codeWin.language,
           content: codeWinValue,
+          kind: isFileWin ? 'file' : 'fragment',
         }
       : null;
 

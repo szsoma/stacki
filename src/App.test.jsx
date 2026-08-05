@@ -7,7 +7,22 @@ import App from './App.jsx';
 const harness = vi.hoisted(() => ({
   menu: new Map(),
   openProject: null,
+  terminalPanelProps: null,
 }));
+
+// jsdom has no ResizeObserver. Only exercised once a page is actually open
+// (StylePanel, mounted behind the right-hand "Style" tab, observes its own
+// width) — the currentFileContext tests below are the first in this file to
+// get that far.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver ??= ResizeObserverStub;
+// jsdom doesn't implement scrollIntoView either — StructurePanel calls it to
+// reveal the selected row.
+Element.prototype.scrollIntoView ??= () => {};
 
 vi.mock('./panels/WelcomeScreen.jsx', () => ({
   default: ({ onOpen }) => {
@@ -21,15 +36,22 @@ vi.mock('./panels/WelcomeScreen.jsx', () => ({
 }));
 
 vi.mock('./panels/TerminalPanel.jsx', () => ({
-  default: ({ active }) => (
-    <section
-      className="terminal-panel"
-      aria-label="Terminal panel integration"
-      hidden={!active}
-    >
-      <textarea aria-label="Terminal input" />
-    </section>
-  ),
+  default: (props) => {
+    const { active } = props;
+    // Captured so tests can assert what App.jsx computes for `currentFile`
+    // (the "Current file" context chip's source) without re-implementing a
+    // real terminal.
+    harness.terminalPanelProps = props;
+    return (
+      <section
+        className="terminal-panel"
+        aria-label="Terminal panel integration"
+        hidden={!active}
+      >
+        <textarea aria-label="Terminal input" />
+      </section>
+    );
+  },
 }));
 
 vi.mock('./panels/PreviewPane.jsx', () => ({
@@ -50,6 +72,7 @@ function setupAvb() {
     addRecent: vi.fn(),
     hasNodeModules: vi.fn(async () => true),
     listProjectClasses: vi.fn(async () => []),
+    listStyleFiles: vi.fn(async () => ({ files: [] })),
     nativeCopy: vi.fn(),
     nativePaste: vi.fn(),
     onDevExit: subscribe,
@@ -65,6 +88,7 @@ function setupAvb() {
       layouts: [],
       components: [],
     })),
+    readPage: vi.fn(async () => ({ editable: false, reason: 'not used in this test', source: '' })),
     startDevServer: vi.fn(async () => ({
       url: 'http://localhost:4321',
       external: false,
@@ -94,6 +118,7 @@ describe('App terminal integration', () => {
   beforeEach(() => {
     harness.menu.clear();
     harness.openProject = null;
+    harness.terminalPanelProps = null;
     setupAvb();
   });
 
@@ -177,5 +202,134 @@ describe('App terminal integration', () => {
 
     field.remove();
     window.removeEventListener('stacki:terminal-menu', onTerminalMenu);
+  });
+});
+
+// Task 15 added `currentFileContext` (what the "Current file" context chip
+// attaches, fed to TerminalPanel as the `currentFile` prop) but nothing
+// asserted its shape for any of the floating code editor's variants — which
+// is how the path/kind bugs fixed here survived per-task review. These drive
+// the app through the same UI a user would use (select frontmatter or an
+// asset file, open its code editor) and inspect what TerminalPanel actually
+// received.
+describe('App currentFileContext (Current file chip)', () => {
+  beforeEach(() => {
+    harness.menu.clear();
+    harness.openProject = null;
+    harness.terminalPanelProps = null;
+    setupAvb();
+  });
+
+  function setupPageAvb({ pagePath, model }) {
+    window.avb.scanProject = vi.fn(async () => ({
+      pages: [{ path: pagePath, name: 'index.astro', route: '/' }],
+      layouts: [],
+      components: [],
+    }));
+    window.avb.readPage = vi.fn(async () => ({ editable: true, model, source: '' }));
+  }
+
+  it('attaches a project-relative fragment for the frontmatter editor', async () => {
+    setupPageAvb({
+      pagePath: '/projects/one/src/pages/index.astro',
+      model: { imports: [], nodes: [], extraFrontmatter: 'const title = "Hi";' },
+    });
+    await openProject();
+    // Mounts TerminalPanel (it only mounts on first open), then switches
+    // back to the navigator — TerminalPanel stays mounted (just hidden)
+    // once mounted once, so `harness.terminalPanelProps` keeps updating.
+    fireEvent.click(screen.getByRole('button', { name: 'Terminal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Navigator' }));
+
+    fireEvent.click(screen.getByText('Frontmatter'));
+    // PropsPanel (which has the "Edit code" button for the selected
+    // frontmatter node) is only exposed to the accessibility tree once the
+    // right rail's Settings tab is active.
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit code' }));
+
+    await waitFor(() => {
+      expect(harness.terminalPanelProps.currentFile).toMatchObject({
+        path: 'src/pages/index.astro',
+        title: 'Frontmatter',
+        language: 'javascript',
+        kind: 'fragment',
+      });
+    });
+    // Project-relative, not the absolute filesystem path `currentPage.path`
+    // actually holds — an absolute path would leak the user's home
+    // directory into whatever gets pasted into the terminal.
+    expect(harness.terminalPanelProps.currentFile.path.startsWith('/')).toBe(false);
+    expect(harness.terminalPanelProps.currentFile.content).toContain('const title');
+  });
+
+  it('attaches a project-relative fragment for a raw <style> node', async () => {
+    setupPageAvb({
+      pagePath: '/projects/one/src/pages/index.astro',
+      model: {
+        imports: [],
+        nodes: [{ id: 'raw1', kind: 'raw', name: 'style', inner: 'body { color: red; }' }],
+        extraFrontmatter: '',
+      },
+    });
+    await openProject();
+    fireEvent.click(screen.getByRole('button', { name: 'Terminal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Navigator' }));
+
+    fireEvent.click(document.querySelector('[data-node-id="raw1"]'));
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit code' }));
+
+    await waitFor(() => {
+      expect(harness.terminalPanelProps.currentFile).toMatchObject({
+        path: 'src/pages/index.astro',
+        title: '<style>',
+        language: 'css',
+        kind: 'fragment',
+        content: 'body { color: red; }',
+      });
+    });
+  });
+
+  it('attaches a public/-prefixed whole file for an open asset file', async () => {
+    setupPageAvb({
+      pagePath: '/projects/one/src/pages/index.astro',
+      model: { imports: [], nodes: [], extraFrontmatter: '' },
+    });
+    window.avb.listAssets = vi.fn(async () => ({
+      entries: [
+        {
+          rel: 'styles/site.css',
+          name: 'site.css',
+          parent: '',
+          isDir: false,
+          size: 10,
+          abs: '/projects/one/public/styles/site.css',
+        },
+      ],
+      missing: false,
+    }));
+    window.avb.onAssetsChanged = vi.fn(() => vi.fn());
+    window.avb.readAssetText = vi.fn(async () => ({ text: 'body { color: red; }' }));
+
+    await openProject();
+    fireEvent.click(screen.getByRole('button', { name: 'Terminal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Assets' }));
+
+    const tile = await screen.findByTitle('/styles/site.css — click to edit');
+    fireEvent.click(tile.querySelector('.asset-thumb'));
+
+    await waitFor(() => {
+      expect(harness.terminalPanelProps.currentFile).toMatchObject({
+        // `codeWin.rel` is relative to public/, not the project root — the
+        // bug this covers reported this file as `styles/site.css`, which
+        // could resolve to an unrelated file elsewhere in the project.
+        path: 'public/styles/site.css',
+        title: 'site.css',
+        language: 'css',
+        kind: 'file',
+      });
+    });
+    expect(harness.terminalPanelProps.currentFile.content).toBe('body { color: red; }');
   });
 });

@@ -32,6 +32,7 @@ export const currentFileResolver = {
         title: file.title,
         language: file.language,
         content: file.content,
+        kind: file.kind,
       },
       estimatedCharacters: file.content.length,
       sourceRevision: `${file.path || file.title}:${file.content.length}:${hashString(file.content)}`,
@@ -39,8 +40,17 @@ export const currentFileResolver = {
   },
 
   renderMarkdown(snapshot) {
-    const { path, title, language, content } = snapshot.data;
-    const heading = path ? `\`${path}\`` : title;
+    const { path, title, language, content, kind } = snapshot.data;
+    // `kind === 'fragment'` means `content` is only a piece of the file
+    // (frontmatter, or one <script>/<style> block) — the heading has to say
+    // so, or an agent reading just the path could mistake the fragment for
+    // the whole file and rewrite it destructively.
+    const heading =
+      kind === 'fragment' && path
+        ? `\`${path}\` (${title} fragment)`
+        : path
+          ? `\`${path}\``
+          : title;
     return [
       '### Current file',
       '',
