@@ -4,11 +4,32 @@ import contextIpcModule from './contextIpc.js';
 const { registerContextIpc } = contextIpcModule;
 
 // contextIpc.js is plain CommonJS and requires ./contextFiles and
-// ./astroParser internally, so list/read/serialize/write are injected as
+// ./astroParser internally, so list/read/serialize/write/git are injected as
 // constructor-style dependencies (same pattern as TerminalManager's injected
 // loadPty) rather than mocked via vi.mock — that keeps the test decoupled
 // from CJS/ESM interop details.
-function setup({ projectRoot = '/projects/site' } = {}) {
+function fakeRunGit(overrides = {}) {
+  const defaults = {
+    'rev-parse --is-inside-work-tree': { stdout: 'true\n', stderr: '' },
+    'rev-parse --abbrev-ref HEAD': { stdout: 'main\n', stderr: '' },
+    'diff --cached': { stdout: '', stderr: '' },
+    'diff': { stdout: '', stderr: '' },
+    'status --porcelain': { stdout: '', stderr: '' },
+    'log -5 --oneline': { stdout: '', stderr: '' },
+    ...overrides,
+  };
+  return vi.fn(async (_root, args) => {
+    // 'diff' is keyed on just its mode (plain vs --cached) because its full
+    // arg list varies with the exclude pathspec under test; every other
+    // command is keyed on its complete argument list.
+    const key = args[0] === 'diff' ? (args.includes('--cached') ? 'diff --cached' : 'diff') : args.join(' ');
+    const canned = defaults[key];
+    if (!canned) throw new Error(`unexpected git args: ${args.join(' ')}`);
+    return canned;
+  });
+}
+
+function setup({ projectRoot = '/projects/site', runGit = fakeRunGit() } = {}) {
   const handles = new Map();
   const ipcMain = {
     handle: vi.fn((channel, fn) => handles.set(channel, fn)),
@@ -28,6 +49,7 @@ function setup({ projectRoot = '/projects/site' } = {}) {
     readProjectFile,
     serializeNode,
     writeContextBundle,
+    runGit,
   });
   return {
     ipcMain,
@@ -39,17 +61,19 @@ function setup({ projectRoot = '/projects/site' } = {}) {
     readProjectFile,
     serializeNode,
     writeContextBundle,
+    runGit,
   };
 }
 
 describe('context IPC', () => {
-  it('registers the four context channels', () => {
+  it('registers the five context channels', () => {
     const { handles } = setup();
     expect([...handles.keys()]).toEqual([
       'context:listFiles',
       'context:readFile',
       'context:serializeNode',
       'context:writeContextBundle',
+      'context:gitDiff',
     ]);
   });
 
@@ -102,6 +126,9 @@ describe('context IPC', () => {
     await expect(handles.get('context:writeContextBundle')(denied, { markdown: 'x' })).rejects.toThrow(
       'Context IPC is available only to Stacki.',
     );
+    await expect(handles.get('context:gitDiff')(denied)).rejects.toThrow(
+      'Context IPC is available only to Stacki.',
+    );
   });
 
   it('rejects when no project is open', async () => {
@@ -111,12 +138,70 @@ describe('context IPC', () => {
     );
   });
 
-  it('unregisters all four handlers', () => {
+  it('unregisters all five handlers', () => {
     const { ipcMain, unregister } = setup();
     unregister();
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:listFiles');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:readFile');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:serializeNode');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:writeContextBundle');
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:gitDiff');
+  });
+});
+
+describe('context:gitDiff', () => {
+  it('returns branch, diffs, untracked files, and recent commits for an allowed sender', async () => {
+    const runGit = fakeRunGit({
+      'diff --cached': { stdout: 'diff --git a/staged.txt b/staged.txt\n+staged change\n', stderr: '' },
+      'diff': { stdout: 'diff --git a/unstaged.txt b/unstaged.txt\n+unstaged change\n', stderr: '' },
+      'status --porcelain': { stdout: '?? new-file.txt\n?? another.txt\n', stderr: '' },
+      'log -5 --oneline': { stdout: 'abc123 Fix bug\ndef456 Add feature\n', stderr: '' },
+    });
+    const { handles, allowed } = setup({ runGit });
+    await expect(handles.get('context:gitDiff')(allowed)).resolves.toEqual({
+      isRepo: true,
+      branch: 'main',
+      staged: 'diff --git a/staged.txt b/staged.txt\n+staged change\n',
+      unstaged: 'diff --git a/unstaged.txt b/unstaged.txt\n+unstaged change\n',
+      untracked: ['new-file.txt', 'another.txt'],
+      recentCommits: ['abc123 Fix bug', 'def456 Add feature'],
+      truncated: false,
+    });
+  });
+
+  it('excludes lockfiles and build directories from the diff pathspec', async () => {
+    const runGit = fakeRunGit();
+    const { handles, allowed } = setup({ runGit });
+    await handles.get('context:gitDiff')(allowed);
+    const diffCall = runGit.mock.calls.find((call) => call[1][0] === 'diff' && !call[1].includes('--cached'));
+    expect(diffCall[1]).toEqual(
+      expect.arrayContaining([
+        ':(exclude)node_modules',
+        ':(exclude)dist',
+        ':(exclude)package-lock.json',
+        ':(exclude)pnpm-lock.yaml',
+        ':(exclude)yarn.lock',
+      ]),
+    );
+  });
+
+  it('truncates an oversized diff and reports it as truncated', async () => {
+    const runGit = fakeRunGit({ 'diff': { stdout: 'x'.repeat(25000), stderr: '' } });
+    const { handles, allowed } = setup({ runGit });
+    const result = await handles.get('context:gitDiff')(allowed);
+    expect(result.truncated).toBe(true);
+    expect(result.unstaged.length).toBeLessThan(25000);
+  });
+
+  it('rejects when the project is not a Git repository', async () => {
+    const { handles, allowed } = setup({
+      runGit: vi.fn(async (_root, args) => {
+        if (args.join(' ') === 'rev-parse --is-inside-work-tree') throw new Error('not a repo');
+        throw new Error(`unexpected git args: ${args.join(' ')}`);
+      }),
+    });
+    await expect(handles.get('context:gitDiff')(allowed)).rejects.toThrow(
+      'This project is not a Git repository.',
+    );
   });
 });

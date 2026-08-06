@@ -554,6 +554,7 @@ registerContextIpc({
     event.senderFrame === mainWindow.webContents.mainFrame &&
     isTrustedRendererUrl(event.senderFrame.url),
   getProjectRoot: () => openProjectRoot,
+  runGit: (root, args) => git(root, args),
 });
 
 function resolveNodeBin() {
