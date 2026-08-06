@@ -309,6 +309,7 @@ describe('useTerminalContext', () => {
     expect(listener.mock.calls[0][0].detail.text).not.toContain('Read the Stacki context at:');
     expect(listener.mock.calls[0][0].detail.text).toContain('x'.repeat(9000));
     expect(result.current.prompt).toBe('');
+    expect(writeContextBundle).toHaveBeenCalledTimes(1);
     window.removeEventListener('stacki:terminal-menu', listener);
   });
 });
