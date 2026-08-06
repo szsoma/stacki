@@ -2039,22 +2039,35 @@ export default function App() {
   // synthetic frontmatter pseudo-node, which isn't a real visual element),
   // the page's editable-model info, and every known component/layout
   // definition for "which component owns this node" lookups.
-  const editorContext = {
-    selectedNode: selectedNode && selectedNode.kind !== 'frontmatter' ? selectedNode : null,
-    nodeTree: model?.nodes ?? [],
-    loopContext,
-    componentDefinitions: insertables,
-    pageInfo: model
-      ? {
-          editable: true,
-          route: currentPage?.route ?? null,
-          path: toProjectRelativePath(currentPage?.path ?? null, project?.path ?? null),
-          layoutName: currentLayoutName,
-          imports: model.imports || [],
-          frontmatter: model.extraFrontmatter || '',
-        }
-      : null,
-  };
+  // Memoized so ContextChipBar's `appState` useMemo (which depends on
+  // editorContext by reference) doesn't invalidate on every App render — an
+  // unmemoized object literal here is a fresh reference every time,
+  // re-running useTerminalContext's staleness-detection effect (which now
+  // also re-hashes page-tree summaries, see currentPageResolver.js) far more
+  // often than the underlying data actually changes. Dependencies cover
+  // every value read below: `model` as a whole (not just `model?.nodes`)
+  // since pageInfo also reads model.imports/model.extraFrontmatter and
+  // model's mere presence, and `project?.path`/`currentPage` rather than the
+  // whole `project` object since only their specific fields are read.
+  const editorContext = useMemo(
+    () => ({
+      selectedNode: selectedNode && selectedNode.kind !== 'frontmatter' ? selectedNode : null,
+      nodeTree: model?.nodes ?? [],
+      loopContext,
+      componentDefinitions: insertables,
+      pageInfo: model
+        ? {
+            editable: true,
+            route: currentPage?.route ?? null,
+            path: toProjectRelativePath(currentPage?.path ?? null, project?.path ?? null),
+            layoutName: currentLayoutName,
+            imports: model.imports || [],
+            frontmatter: model.extraFrontmatter || '',
+          }
+        : null,
+    }),
+    [selectedNode, model, loopContext, insertables, currentPage, project?.path, currentLayoutName],
+  );
 
   // Returns whether the selection actually has a code editor, so the Enter
   // shortcut below knows whether it handled the key.
