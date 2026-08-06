@@ -33,7 +33,7 @@ function requestTerminalDisposal(sessionId) {
   }
 }
 
-export default function TerminalPanel({ active, currentFile, projectPath }) {
+export default function TerminalPanel({ active, currentFile, projectPath, editorContext }) {
   const panelRef = useRef(null);
   const hostRef = useRef(null);
   const terminalRef = useRef(null);
@@ -479,7 +479,7 @@ export default function TerminalPanel({ active, currentFile, projectPath }) {
       <header className="terminal-header">
         <h2>Terminal</h2>
       </header>
-      <ContextChipBar currentFile={currentFile} projectPath={projectPath} />
+      <ContextChipBar currentFile={currentFile} projectPath={projectPath} editorContext={editorContext} />
       <div className="terminal-surface" ref={hostRef} />
       <div
         className="terminal-resize-handle"

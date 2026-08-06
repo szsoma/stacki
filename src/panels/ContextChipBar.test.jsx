@@ -7,6 +7,7 @@ beforeEach(() => {
   window.avb = {
     listContextFiles: vi.fn(async () => ({ files: ['src/pages/index.astro'] })),
     readContextFile: vi.fn(async ({ rel }) => ({ rel, content: `content of ${rel}`, size: 10 })),
+    serializeNode: vi.fn(async ({ node }) => ({ markup: `<${node.name}></${node.name}>` })),
   };
 });
 
@@ -59,5 +60,66 @@ describe('ContextChipBar', () => {
   it('disables Insert into terminal until there is prompt text', () => {
     render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
     expect(screen.getByRole('button', { name: 'Insert into terminal' })).toBeDisabled();
+  });
+
+  it('offers Selected element, Current page, and Current component only when editor context supports them', () => {
+    const { rerender } = render(
+      <ContextChipBar currentFile={null} projectPath="/projects/site" editorContext={{}} />,
+    );
+    fireEvent.click(screen.getByText('+ Add context'));
+    expect(screen.queryByText('Selected element')).not.toBeInTheDocument();
+    expect(screen.queryByText('Current page')).not.toBeInTheDocument();
+    expect(screen.queryByText('Current component')).not.toBeInTheDocument();
+
+    const selectedNode = { id: 'h1', kind: 'element', name: 'h1', props: {}, children: null };
+    const nodeTree = [
+      { id: 'hero', kind: 'component', name: 'HeroSection', props: {}, children: [selectedNode] },
+    ];
+    const componentDefinitions = [
+      { name: 'HeroSection', path: '/projects/site/src/components/HeroSection.astro' },
+    ];
+    rerender(
+      <ContextChipBar
+        currentFile={null}
+        projectPath="/projects/site"
+        editorContext={{
+          selectedNode,
+          nodeTree,
+          componentDefinitions,
+          pageInfo: {
+            editable: true,
+            route: '/',
+            path: 'src/pages/index.astro',
+            layoutName: '',
+            imports: [],
+            frontmatter: '',
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText('Selected element')).toBeInTheDocument();
+    expect(screen.getByText('Current page')).toBeInTheDocument();
+    expect(screen.getByText('Current component')).toBeInTheDocument();
+  });
+
+  it('adds a Selected element chip and includes its serialized markup in the composed prompt', async () => {
+    const selectedNode = { id: 'h1', kind: 'element', name: 'h1', props: {}, children: null };
+    render(
+      <ContextChipBar
+        currentFile={null}
+        projectPath="/projects/site"
+        editorContext={{ selectedNode, nodeTree: [selectedNode], componentDefinitions: [] }}
+      />,
+    );
+    fireEvent.click(screen.getByText('+ Add context'));
+    fireEvent.click(screen.getByText('Selected element'));
+    await waitFor(() => expect(screen.getByText('Selected element')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('Ask Codex to…'), { target: { value: 'Fix this.' } });
+    const listener = vi.fn();
+    window.addEventListener('stacki:terminal-menu', listener);
+    fireEvent.click(screen.getByRole('button', { name: 'Insert into terminal' }));
+    expect(listener.mock.calls[0][0].detail.text).toContain('<h1></h1>');
+    window.removeEventListener('stacki:terminal-menu', listener);
   });
 });

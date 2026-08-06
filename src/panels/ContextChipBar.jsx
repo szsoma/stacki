@@ -5,6 +5,9 @@ import ContextDetailsPopover from './ContextDetailsPopover.jsx';
 import { getResolver, listResolvers, registerResolver } from '../context/contextResolvers.js';
 import { currentFileResolver } from '../context/currentFileResolver.js';
 import { selectedFilesResolver } from '../context/selectedFilesResolver.js';
+import { selectedElementResolver } from '../context/selectedElementResolver.js';
+import { currentPageResolver } from '../context/currentPageResolver.js';
+import { currentComponentResolver } from '../context/currentComponentResolver.js';
 import { useTerminalContext } from '../context/useTerminalContext.js';
 
 // Registering here (module scope, run once on import) keeps Phase 1's two
@@ -13,8 +16,13 @@ import { useTerminalContext } from '../context/useTerminalContext.js';
 // keys by type and simply replaces the previous entry.
 registerResolver(currentFileResolver);
 registerResolver(selectedFilesResolver);
+registerResolver(selectedElementResolver);
+registerResolver(currentPageResolver);
+registerResolver(currentComponentResolver);
 
-export default function ContextChipBar({ currentFile, projectPath }) {
+const EMPTY_EDITOR_CONTEXT = {};
+
+export default function ContextChipBar({ currentFile, projectPath, editorContext = EMPTY_EDITOR_CONTEXT }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [detailsId, setDetailsId] = useState(null);
 
@@ -22,10 +30,12 @@ export default function ContextChipBar({ currentFile, projectPath }) {
     () => ({
       currentFile,
       projectPath,
+      ...editorContext,
       readProjectFile: (rel) => window.avb.readContextFile({ projectPath, rel }),
       listProjectFiles: async () => (await window.avb.listContextFiles({ projectPath })).files,
+      serializeNode: async (node) => (await window.avb.serializeNode({ node })).markup,
     }),
-    [currentFile, projectPath],
+    [currentFile, projectPath, editorContext],
   );
 
   const {

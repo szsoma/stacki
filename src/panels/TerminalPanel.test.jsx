@@ -157,6 +157,7 @@ beforeEach(() => {
     }),
     listContextFiles: vi.fn(async () => ({ files: [] })),
     readContextFile: vi.fn(async ({ rel }) => ({ rel, content: '', size: 0 })),
+    serializeNode: vi.fn(async ({ node }) => ({ markup: `<${node.name}></${node.name}>` })),
   };
 });
 
@@ -682,5 +683,21 @@ describe('TerminalPanel sizing and terminal menu', () => {
 
     expect(terminal.paste).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(true);
+  });
+});
+
+describe('TerminalPanel editor context', () => {
+  it('threads editorContext through to the context chip bar', async () => {
+    const selectedNode = { id: 'h1', kind: 'element', name: 'h1', props: {}, children: null };
+    render(
+      <TerminalPanel
+        active
+        editorContext={{ selectedNode, nodeTree: [selectedNode], componentDefinitions: [] }}
+      />,
+    );
+    await waitFor(() => expect(window.avb.startTerminal).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText('+ Add context'));
+    expect(screen.getByText('Selected element')).toBeInTheDocument();
   });
 });
