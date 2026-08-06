@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearResolvers, registerResolver } from './contextResolvers.js';
-import { createSnapshot, withReady } from './contextTypes.js';
+import { createSnapshot, withError, withReady, withStale } from './contextTypes.js';
 import { currentFileResolver } from './currentFileResolver.js';
 import { composePrompt } from './promptComposer.js';
 
@@ -38,6 +38,33 @@ describe('composePrompt', () => {
     const resolving = createSnapshot({ type: 'current-file', label: 'Current file' });
     const markdown = composePrompt({ request: 'Fix the spacing.', snapshots: [resolving] });
     expect(markdown).not.toContain('## Stacki context');
+  });
+
+  it('includes a stale snapshot (with a freshness note) alongside a ready one', () => {
+    const stale = withStale(readySnapshot());
+    const markdown = composePrompt({ request: 'Fix the spacing.', snapshots: [stale] });
+    expect(markdown).toContain('## Stacki context');
+    expect(markdown).toContain('### Current file');
+    expect(markdown).toContain('const x = 1;');
+    expect(markdown).toContain('captured earlier — may be out of date');
+  });
+
+  it('excludes resolving and error snapshots even alongside an included stale one', () => {
+    const resolving = createSnapshot({ type: 'current-file', label: 'Current file' });
+    const errored = withError(
+      createSnapshot({ type: 'current-file', label: 'Current file' }),
+      new Error('boom'),
+    );
+    const stale = withStale(readySnapshot());
+    const markdown = composePrompt({
+      request: 'Fix the spacing.',
+      snapshots: [resolving, errored, stale],
+    });
+    // Only the stale snapshot's single rendered section should appear —
+    // resolving/error snapshots contributed nothing.
+    const occurrences = markdown.split('### Current file').length - 1;
+    expect(occurrences).toBe(1);
+    expect(markdown).toContain('captured earlier — may be out of date');
   });
 
   it('trims the request text', () => {

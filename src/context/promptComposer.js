@@ -7,12 +7,24 @@ const INSTRUCTIONS = [
   'Do not assume that unrelated components should be changed.',
 ].join('\n');
 
+const STALE_NOTE = '_(captured earlier — may be out of date; refresh in Stacki if needed)_';
+
+// Both READY and STALE snapshots carry usable `data` from their last
+// successful resolve (withStale() only flips `status`, it never clears
+// `data` — see contextTypes.js). RESOLVING/ERROR snapshots have no usable
+// data (null, or an in-progress/failed resolve) and stay excluded.
+const INCLUDABLE_STATUSES = new Set([CONTEXT_CHIP_STATUS.READY, CONTEXT_CHIP_STATUS.STALE]);
+
 export function composePrompt({ request, snapshots }) {
   const sections = snapshots
-    .filter((snapshot) => snapshot.status === CONTEXT_CHIP_STATUS.READY)
+    .filter((snapshot) => INCLUDABLE_STATUSES.has(snapshot.status))
     .map((snapshot) => {
       const resolver = getResolver(snapshot.type);
-      return resolver ? resolver.renderMarkdown(snapshot) : '';
+      if (!resolver) return '';
+      const rendered = resolver.renderMarkdown(snapshot);
+      return snapshot.status === CONTEXT_CHIP_STATUS.STALE
+        ? `${rendered}\n\n${STALE_NOTE}`
+        : rendered;
     })
     .filter(Boolean);
 

@@ -102,6 +102,34 @@ describe('ContextChipBar', () => {
     expect(screen.getByText('Current component')).toBeInTheDocument();
   });
 
+  it('shows a markdown preview in the details popover for a stale chip, not just a ready one', async () => {
+    const { rerender } = render(
+      <ContextChipBar
+        currentFile={{ path: 'src/pages/index.astro', title: 'Frontmatter', language: 'javascript', content: 'const x = 1;' }}
+        projectPath="/projects/site"
+      />,
+    );
+    fireEvent.click(screen.getByText('+ Add context'));
+    fireEvent.click(screen.getByText('Current file'));
+    await waitFor(() => expect(screen.getByText('Current file')).toBeInTheDocument());
+
+    // Change the file's content — the chip's stale key (a hash of path +
+    // content) no longer matches, so useTerminalContext's staleness effect
+    // flips it to STALE, while still holding onto its last-resolved data.
+    rerender(
+      <ContextChipBar
+        currentFile={{ path: 'src/pages/index.astro', title: 'Frontmatter', language: 'javascript', content: 'const x = 2;' }}
+        projectPath="/projects/site"
+      />,
+    );
+
+    fireEvent.click(screen.getByText('Current file'));
+    // The popover's preview must still show the (now-stale) markdown —
+    // this exercises ContextChipBar's detailsMarkdown guard, which must
+    // compute markdown for 'stale' chips, not only 'ready' ones.
+    expect(await screen.findByText(/const x = 1;/)).toBeInTheDocument();
+  });
+
   it('adds a Selected element chip and includes its serialized markup in the composed prompt', async () => {
     const selectedNode = { id: 'h1', kind: 'element', name: 'h1', props: {}, children: null };
     render(

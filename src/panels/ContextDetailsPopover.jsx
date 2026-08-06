@@ -16,12 +16,14 @@ export default function ContextDetailsPopover({ snapshot, markdown, onRefresh, o
       <h3>{snapshot.label}</h3>
       <div className="context-details-meta">
         Captured {new Date(snapshot.capturedAt).toLocaleTimeString()}
-        {snapshot.status === 'ready' && ` · ~${snapshot.estimatedTokens} tokens`}
+        {(snapshot.status === 'ready' || snapshot.status === 'stale') && ` · ~${snapshot.estimatedTokens} tokens`}
       </div>
       {snapshot.status === 'error' && (
         <div className="context-details-error">{snapshot.error?.message}</div>
       )}
-      {snapshot.status === 'ready' && <pre className="context-details-preview">{markdown}</pre>}
+      {(snapshot.status === 'ready' || snapshot.status === 'stale') && (
+        <pre className="context-details-preview">{markdown}</pre>
+      )}
       <div className="dropdown-row">
         <button type="button" onClick={() => onRefresh(snapshot.id)}>Refresh</button>
         <button type="button" onClick={() => onRemove(snapshot.id)}>Remove</button>

@@ -53,7 +53,10 @@ export default function ContextChipBar({ currentFile, projectPath, editorContext
 
   const detailsChip = chips.find((chip) => chip.id === detailsId) || null;
   const detailsMarkdown = useMemo(() => {
-    if (!detailsChip || detailsChip.status !== 'ready') return '';
+    // Both 'ready' and 'stale' chips carry usable `data` (withStale() never
+    // clears it), so both have a preview to render — only 'resolving' and
+    // 'error' chips don't.
+    if (!detailsChip || !['ready', 'stale'].includes(detailsChip.status)) return '';
     const resolver = getResolver(detailsChip.type);
     return resolver ? resolver.renderMarkdown(detailsChip) : '';
   }, [detailsChip]);

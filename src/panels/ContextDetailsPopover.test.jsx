@@ -35,6 +35,21 @@ describe('ContextDetailsPopover', () => {
     expect(preview.textContent).toBe('### Current file\n\nconst x = 1;');
   });
 
+  it('shows the rendered markdown preview for a stale snapshot too', () => {
+    render(
+      <ContextDetailsPopover
+        snapshot={snapshot({ status: 'stale' })}
+        markdown={'### Current file\n\nconst x = 1;'}
+        onRefresh={vi.fn()}
+        onRemove={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/~42 tokens/)).toBeInTheDocument();
+    const preview = screen.getByText(/const x = 1;/);
+    expect(preview.textContent).toBe('### Current file\n\nconst x = 1;');
+  });
+
   it('shows the error message for a failed snapshot instead of a preview', () => {
     render(
       <ContextDetailsPopover
