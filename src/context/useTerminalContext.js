@@ -9,24 +9,23 @@ import {
 import { getResolver } from './contextResolvers.js';
 import { composePrompt } from './promptComposer.js';
 
-function currentFileKey(currentFile) {
-  if (!currentFile) return null;
-  return `${currentFile.path || currentFile.title}:${currentFile.content.length}:${currentFile.content}`;
-}
-
 export function useTerminalContext(appState) {
   const [chips, setChips] = useState([]);
   const [prompt, setPrompt] = useState('');
   const appStateRef = useRef(appState);
   appStateRef.current = appState;
-  const previousFileKeyRef = useRef(currentFileKey(appState.currentFile));
 
   const resolveChip = useCallback(async (id, type, options) => {
     const resolver = getResolver(type);
     try {
       const result = await resolver.resolve(appStateRef.current, options);
+      const staleKey = resolver.computeStaleKey
+        ? resolver.computeStaleKey(appStateRef.current)
+        : null;
       setChips((current) =>
-        current.map((chip) => (chip.id === id ? withReady(chip, result) : chip)),
+        current.map((chip) =>
+          chip.id === id ? { ...withReady(chip, result), staleKey } : chip,
+        ),
       );
     } catch (error) {
       setChips((current) =>
@@ -71,22 +70,34 @@ export function useTerminalContext(appState) {
     [chips, resolveChip],
   );
 
-  // The floating code editor's content already lives in the renderer, so a
-  // changed open-file key is enough to know the current-file chip is stale —
-  // no re-read needed just to detect it.
+  // Each resolver may declare computeStaleKey(appState) to say what its
+  // snapshot depends on. A ready chip whose resolver's current key no longer
+  // matches the key captured at resolve time has had its source change from
+  // under it — mark it stale so the user can refresh or keep the captured
+  // version. Resolvers without computeStaleKey (e.g. Selected files) never
+  // auto-stale.
   useEffect(() => {
-    const key = currentFileKey(appState.currentFile);
-    if (key !== previousFileKeyRef.current) {
-      setChips((current) =>
-        current.map((chip) =>
-          chip.type === 'current-file' && chip.status === CONTEXT_CHIP_STATUS.READY
-            ? withStale(chip)
-            : chip,
-        ),
-      );
-    }
-    previousFileKeyRef.current = key;
-  }, [appState.currentFile]);
+    setChips((current) => {
+      // Bail out with the same array reference when nothing actually goes
+      // stale. `.map()` unconditionally allocates a new array, and handing
+      // that to setChips would change identity even when no chip changed —
+      // React can't bail out of the re-render, appState's identity may be
+      // freshly allocated by the caller on every one of those re-renders too
+      // (e.g. an inline object literal), and the resulting render -> effect
+      // -> setChips -> render cycle never terminates.
+      let changed = false;
+      const next = current.map((chip) => {
+        if (chip.status !== CONTEXT_CHIP_STATUS.READY) return chip;
+        const resolver = getResolver(chip.type);
+        if (!resolver?.computeStaleKey) return chip;
+        const staleKey = resolver.computeStaleKey(appState);
+        if (staleKey === chip.staleKey) return chip;
+        changed = true;
+        return withStale(chip);
+      });
+      return changed ? next : current;
+    });
+  }, [appState]);
 
   const composedMarkdown = useMemo(
     () => composePrompt({ request: prompt, snapshots: chips }),

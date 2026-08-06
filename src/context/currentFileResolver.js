@@ -11,6 +11,10 @@ function hashString(text) {
   return hash.toString(36);
 }
 
+function fileRevisionKey(file) {
+  return `${file.path || file.title}:${file.content.length}:${hashString(file.content)}`;
+}
+
 export const currentFileResolver = {
   type: CONTEXT_CHIP_TYPES.CURRENT_FILE,
   label: 'Current file',
@@ -35,8 +39,12 @@ export const currentFileResolver = {
         kind: file.kind,
       },
       estimatedCharacters: file.content.length,
-      sourceRevision: `${file.path || file.title}:${file.content.length}:${hashString(file.content)}`,
+      sourceRevision: fileRevisionKey(file),
     };
+  },
+
+  computeStaleKey(appState) {
+    return appState.currentFile ? fileRevisionKey(appState.currentFile) : null;
   },
 
   renderMarkdown(snapshot) {

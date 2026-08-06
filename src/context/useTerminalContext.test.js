@@ -102,11 +102,11 @@ describe('useTerminalContext', () => {
     await waitFor(() => expect(result.current.chips[0].data).toEqual({ value: 'second' }));
   });
 
-  it('marks a ready current-file chip stale when the open file changes', async () => {
+  it('marks a ready chip stale when its resolver-reported key changes', async () => {
     registerResolver(
       fakeResolver({
-        type: 'current-file',
         resolve: vi.fn(async () => ({ data: { value: 'x' }, estimatedCharacters: 1, sourceRevision: 'r1' })),
+        computeStaleKey: (appState) => appState.currentFile?.content ?? null,
       }),
     );
     const { result, rerender } = renderHook(
@@ -115,12 +115,28 @@ describe('useTerminalContext', () => {
     );
 
     act(() => {
-      result.current.addChip('current-file');
+      result.current.addChip('fake-a');
     });
     await waitFor(() => expect(result.current.chips[0].status).toBe(CONTEXT_CHIP_STATUS.READY));
 
     rerender({ appState: { currentFile: { path: 'a.astro', content: 'two' }, projectPath: null } });
     expect(result.current.chips[0].status).toBe(CONTEXT_CHIP_STATUS.STALE);
+  });
+
+  it('never auto-stales a chip whose resolver has no computeStaleKey', async () => {
+    registerResolver(fakeResolver());
+    const { result, rerender } = renderHook(
+      ({ appState }) => useTerminalContext(appState),
+      { initialProps: { appState: { currentFile: { path: 'a.astro', content: 'one' }, projectPath: null } } },
+    );
+
+    act(() => {
+      result.current.addChip('fake-a');
+    });
+    await waitFor(() => expect(result.current.chips[0].status).toBe(CONTEXT_CHIP_STATUS.READY));
+
+    rerender({ appState: { currentFile: { path: 'a.astro', content: 'two' }, projectPath: null } });
+    expect(result.current.chips[0].status).toBe(CONTEXT_CHIP_STATUS.READY);
   });
 
   it('composes the prompt from the current prompt text and ready chips, then clears the prompt on insert', async () => {

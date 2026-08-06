@@ -83,6 +83,15 @@ describe('currentFileResolver', () => {
     expect(markdown).toContain('const x = 1;');
   });
 
+  it('computes a stale key from the open file, matching what resolve captures', async () => {
+    const appState = {
+      currentFile: { path: 'a.astro', title: 'a', language: 'javascript', content: 'const x = 1;', kind: 'fragment' },
+    };
+    const result = await currentFileResolver.resolve(appState);
+    expect(currentFileResolver.computeStaleKey(appState)).toBe(result.sourceRevision);
+    expect(currentFileResolver.computeStaleKey({ currentFile: null })).toBeNull();
+  });
+
   it('falls back to the title when a fragment has no path', () => {
     const snapshot = {
       data: {
