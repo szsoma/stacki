@@ -8,6 +8,7 @@ import {
 } from './contextTypes.js';
 import { getResolver } from './contextResolvers.js';
 import { composePrompt } from './promptComposer.js';
+import { shouldUseContextFile } from './contextSize.js';
 
 export function useTerminalContext(appState) {
   const [chips, setChips] = useState([]);
@@ -114,20 +115,44 @@ export function useTerminalContext(appState) {
   );
 
   const insertIntoTerminal = useCallback(() => {
-    // `dispatchEvent` runs listeners synchronously, so TerminalPanel's
-    // handler has already run (and called `preventDefault()` if it couldn't
-    // actually paste — no live shell session) by the time this returns.
-    // Only clear the prompt when the text was really delivered, or the
-    // user's typed request is silently lost the moment the shell exits.
-    const event = new CustomEvent('stacki:terminal-menu', {
-      cancelable: true,
-      detail: { action: 'insert', text: composedMarkdown },
-    });
-    window.dispatchEvent(event);
-    if (!event.defaultPrevented) {
-      setPrompt('');
+    const dispatch = (text) => {
+      // `dispatchEvent` runs listeners synchronously, so TerminalPanel's
+      // handler has already run (and called `preventDefault()` if it
+      // couldn't actually paste — no live shell session) by the time this
+      // returns. Only clear the prompt when the text was really delivered,
+      // or the user's typed request is silently lost the moment the shell
+      // exits.
+      const event = new CustomEvent('stacki:terminal-menu', {
+        cancelable: true,
+        detail: { action: 'insert', text },
+      });
+      window.dispatchEvent(event);
+      if (!event.defaultPrevented) {
+        setPrompt('');
+      }
+    };
+
+    // Deciding synchronously, and only awaiting anything on the file-
+    // delivery branch, keeps the common case (small prompt, no Git diff /
+    // big file-list chip) fully synchronous — existing callers dispatch and
+    // assert immediately after calling this, with no render in between.
+    if (!shouldUseContextFile({ chips, composedMarkdown })) {
+      dispatch(composedMarkdown);
+      return;
     }
-  }, [composedMarkdown]);
+
+    const requestText = prompt.trim();
+    void appStateRef.current
+      .writeContextBundle(composedMarkdown)
+      .then(({ relPath }) => {
+        dispatch(`Read the Stacki context at:\n\n${relPath}\n\nThen complete this request:\n\n${requestText}`);
+      })
+      .catch(() => {
+        // Spec §26: "Context file creation failed -> Fall back to inline
+        // mode when possible."
+        dispatch(composedMarkdown);
+      });
+  }, [chips, composedMarkdown, prompt]);
 
   return {
     chips,

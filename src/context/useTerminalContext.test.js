@@ -260,4 +260,55 @@ describe('useTerminalContext', () => {
     expect(listener.mock.calls[0][0].cancelable).toBe(true);
     window.removeEventListener('stacki:terminal-menu', listener);
   });
+
+  it('writes a context-file bundle and inserts a short reference when the content is large', async () => {
+    registerResolver(fakeResolver());
+    const writeContextBundle = vi.fn(async () => ({ relPath: '.stacki/tmp/context/request-1.md' }));
+    const { result } = renderHook(() =>
+      useTerminalContext({ currentFile: null, projectPath: null, writeContextBundle }),
+    );
+
+    act(() => {
+      result.current.setPrompt('x'.repeat(9000));
+    });
+
+    const listener = vi.fn();
+    window.addEventListener('stacki:terminal-menu', listener);
+    act(() => {
+      result.current.insertIntoTerminal();
+    });
+    await waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    expect(writeContextBundle).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].detail.text).toBe(
+      'Read the Stacki context at:\n\n.stacki/tmp/context/request-1.md\n\nThen complete this request:\n\n' +
+        'x'.repeat(9000),
+    );
+    expect(result.current.prompt).toBe('');
+    window.removeEventListener('stacki:terminal-menu', listener);
+  });
+
+  it('falls back to inline delivery when writing the context file fails', async () => {
+    registerResolver(fakeResolver());
+    const writeContextBundle = vi.fn(async () => {
+      throw new Error('disk full');
+    });
+    const { result } = renderHook(() =>
+      useTerminalContext({ currentFile: null, projectPath: null, writeContextBundle }),
+    );
+
+    act(() => {
+      result.current.setPrompt('x'.repeat(9000));
+    });
+
+    const listener = vi.fn();
+    window.addEventListener('stacki:terminal-menu', listener);
+    act(() => {
+      result.current.insertIntoTerminal();
+    });
+    await waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    expect(listener.mock.calls[0][0].detail.text).not.toContain('Read the Stacki context at:');
+    expect(listener.mock.calls[0][0].detail.text).toContain('x'.repeat(9000));
+    expect(result.current.prompt).toBe('');
+    window.removeEventListener('stacki:terminal-menu', listener);
+  });
 });
