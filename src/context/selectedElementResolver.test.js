@@ -73,6 +73,13 @@ describe('selectedElementResolver', () => {
     );
   });
 
+  it('resolves ownerComponent as null when no owning component is found', async () => {
+    const NO_OWNER_TREE = [{ id: 'p1', kind: 'element', name: 'p', props: {}, children: [] }];
+    const appState = baseAppState({ nodeTree: NO_OWNER_TREE, selectedNode: NO_OWNER_TREE[0] });
+    const result = await selectedElementResolver.resolve(appState);
+    expect(result.data.ownerComponent).toBeNull();
+  });
+
   it('renders tag, ancestors, owner, props, children, and markup as Markdown', () => {
     const snapshot = {
       data: {
@@ -107,5 +114,64 @@ describe('selectedElementResolver', () => {
 
   it('returns null stale key when nothing is selected', () => {
     expect(selectedElementResolver.computeStaleKey(baseAppState({ selectedNode: null }))).toBeNull();
+  });
+
+  it('detects staleness when a descendant deep inside the selected subtree changes', async () => {
+    // Select the whole 'hero' component (not the leaf h1) so the mutation
+    // below lands two levels down ('hero' -> 'h1' -> 'txt'), leaving
+    // 'hero's own shallow fields (name/props/child count) untouched — only
+    // a full-subtree hash catches this kind of edit.
+    const heroAppState = baseAppState({ selectedNode: TREE[0] });
+    await selectedElementResolver.resolve(heroAppState);
+    const keyAtResolve = selectedElementResolver.computeStaleKey(heroAppState);
+
+    const mutatedHero = {
+      ...TREE[0],
+      children: [
+        {
+          ...TREE[0].children[0],
+          children: [{ ...TREE[0].children[0].children[0], value: 'Ship faster' }],
+        },
+      ],
+    };
+    const keyAfterEdit = selectedElementResolver.computeStaleKey(
+      baseAppState({ selectedNode: mutatedHero }),
+    );
+
+    expect(keyAfterEdit).not.toBe(keyAtResolve);
+  });
+
+  it('produces a different stale key when an ancestor is renamed', () => {
+    const key1 = selectedElementResolver.computeStaleKey(baseAppState());
+    const renamedTree = [{ ...TREE[0], name: 'HeroSectionRenamed' }];
+    const key2 = selectedElementResolver.computeStaleKey(baseAppState({ nodeTree: renamedTree }));
+    expect(key1).not.toBe(key2);
+  });
+
+  it('produces a different stale key when the owner component moves', () => {
+    const key1 = selectedElementResolver.computeStaleKey(baseAppState());
+    const movedDefinitions = [
+      { name: 'HeroSection', path: '/projects/site/src/components/moved/HeroSection.astro' },
+    ];
+    const key2 = selectedElementResolver.computeStaleKey(
+      baseAppState({ componentDefinitions: movedDefinitions }),
+    );
+    expect(key1).not.toBe(key2);
+  });
+
+  it('produces a different stale key when loop context changes', () => {
+    const key1 = selectedElementResolver.computeStaleKey(baseAppState());
+    const key2 = selectedElementResolver.computeStaleKey(
+      baseAppState({ loopContext: { ancestorHeads: ['items.map((item) => ('] } }),
+    );
+    expect(key1).not.toBe(key2);
+  });
+
+  it('does not flicker stale immediately after resolving (same appState, same key)', async () => {
+    const appState = baseAppState();
+    await selectedElementResolver.resolve(appState);
+    const staleKeyAtResolve = selectedElementResolver.computeStaleKey(appState);
+    const staleKeyImmediatelyAfter = selectedElementResolver.computeStaleKey(appState);
+    expect(staleKeyImmediatelyAfter).toBe(staleKeyAtResolve);
   });
 });

@@ -12,6 +12,12 @@ function hashString(text) {
   return hash.toString(36);
 }
 
+// Hashes the selected node's *entire* subtree (not just its own shallow
+// fields) so that editing something nested arbitrarily deep inside the
+// selection — e.g. a grandchild text node's value — changes this key.
+// JSON.stringify already recurses through `node.children`, so passing the
+// real children array (rather than just its length) is enough; no manual
+// deep-walk needed.
 function nodeRevisionKey(node) {
   if (!node) return null;
   const json = JSON.stringify({
@@ -19,9 +25,28 @@ function nodeRevisionKey(node) {
     kind: node.kind,
     name: node.name,
     props: node.props,
-    childCount: node.children?.length ?? null,
+    children: node.children,
   });
   return `${node.id}:${hashString(json)}`;
+}
+
+// Ancestor identities (id/name/kind) plus the owning component's identity —
+// covers a renamed ancestor or a moved/renamed owner component, neither of
+// which touches the selected node's own subtree and so wouldn't otherwise
+// change nodeRevisionKey. Only used by computeStaleKey: resolve()'s
+// sourceRevision doesn't need this since ancestors/owner aren't part of the
+// serialized markup it hashes.
+function contextRevisionKey(appState, selectedNode) {
+  const { nodeTree = [], componentDefinitions = [], loopContext } = appState;
+  const chain = ancestorChain(nodeTree, selectedNode.id);
+  const ancestors = chain.slice(0, -1).map((node) => ({ id: node.id, name: node.name, kind: node.kind }));
+  const owner = findOwningComponent(nodeTree, selectedNode.id, componentDefinitions);
+  const json = JSON.stringify({
+    ancestors,
+    owner: owner ? { name: owner.definition.name, path: owner.definition.path } : null,
+    loopVariables: loopContext?.ancestorHeads || [],
+  });
+  return hashString(json);
 }
 
 export const selectedElementResolver = {
@@ -69,7 +94,9 @@ export const selectedElementResolver = {
   },
 
   computeStaleKey(appState) {
-    return nodeRevisionKey(appState.selectedNode);
+    const { selectedNode } = appState;
+    if (!selectedNode) return null;
+    return `${nodeRevisionKey(selectedNode)}:${contextRevisionKey(appState, selectedNode)}`;
   },
 
   renderMarkdown(snapshot) {
