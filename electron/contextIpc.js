@@ -1,4 +1,5 @@
 const contextFiles = require('./contextFiles');
+const astroParser = require('./astroParser');
 
 function registerContextIpc({
   ipcMain,
@@ -6,6 +7,7 @@ function registerContextIpc({
   getProjectRoot,
   listProjectFiles = contextFiles.listProjectFiles,
   readProjectFile = contextFiles.readProjectFile,
+  serializeNode = (node) => astroParser.serializeNodes([node]),
 }) {
   const assertAllowed = (event) => {
     if (!isAllowedSender(event)) {
@@ -26,13 +28,19 @@ function registerContextIpc({
     assertAllowed(event);
     return readProjectFile(requireRoot(), payload?.rel);
   };
+  const serialize = async (event, payload) => {
+    assertAllowed(event);
+    return { markup: serializeNode(payload?.node) };
+  };
 
   ipcMain.handle('context:listFiles', listFiles);
   ipcMain.handle('context:readFile', readFile);
+  ipcMain.handle('context:serializeNode', serialize);
 
   return () => {
     ipcMain.removeHandler('context:listFiles');
     ipcMain.removeHandler('context:readFile');
+    ipcMain.removeHandler('context:serializeNode');
   };
 }
 

@@ -552,6 +552,7 @@ contextBridge.exposeInMainWorld('avb', {
   // Terminal context chips
   listContextFiles: invoke('context:listFiles'),
   readContextFile: invoke('context:readFile'),
+  serializeNode: invoke('context:serializeNode'),
 
   // Assets (public/)
   listAssets: invoke('assets:list'),
