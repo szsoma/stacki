@@ -18,10 +18,19 @@ export function useTerminalContext(appState) {
   const resolveChip = useCallback(async (id, type, options) => {
     const resolver = getResolver(type);
     try {
-      const result = await resolver.resolve(appStateRef.current, options);
-      const staleKey = resolver.computeStaleKey
-        ? resolver.computeStaleKey(appStateRef.current)
-        : null;
+      // Capture appStateRef.current ONCE, before the await, and reuse that
+      // same snapshot for both resolve() and computeStaleKey(). appState is
+      // reassigned into the ref on every render, and resolve() can await a
+      // real round-trip (e.g. serializeNode's IPC call) during which the
+      // user can trigger an ordinary re-render (e.g. selecting a different
+      // node). Reading appStateRef.current a second time after the await
+      // would compute the stale key from that NEWER state while `result`
+      // still describes the OLDER one — the two would then always agree
+      // (both "new"), so the chip would silently show stale data with no
+      // "Updated" badge ever appearing.
+      const state = appStateRef.current;
+      const result = await resolver.resolve(state, options);
+      const staleKey = resolver.computeStaleKey ? resolver.computeStaleKey(state) : null;
       setChips((current) =>
         current.map((chip) =>
           chip.id === id ? { ...withReady(chip, result), staleKey } : chip,

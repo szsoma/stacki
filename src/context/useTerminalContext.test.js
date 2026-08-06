@@ -123,6 +123,63 @@ describe('useTerminalContext', () => {
     expect(result.current.chips[0].status).toBe(CONTEXT_CHIP_STATUS.STALE);
   });
 
+  it('resolves against the appState captured at resolve-start, not whatever appState arrives mid-flight', async () => {
+    const { promise: resolvePromise, resolve: releaseResolve } = deferred();
+    let capturedForResolve = null;
+    let capturedForStaleKey = null;
+    registerResolver(
+      fakeResolver({
+        resolve: vi.fn(async (appState) => {
+          capturedForResolve = appState;
+          await resolvePromise;
+          return { data: { value: appState.currentFile?.content }, estimatedCharacters: 1, sourceRevision: 'r1' };
+        }),
+        computeStaleKey: (appState) => {
+          capturedForStaleKey = appState;
+          return appState.currentFile?.content ?? null;
+        },
+      }),
+    );
+    const { result, rerender } = renderHook(
+      ({ appState }) => useTerminalContext(appState),
+      { initialProps: { appState: { currentFile: { path: 'a.astro', content: 'one' }, projectPath: null } } },
+    );
+
+    act(() => {
+      result.current.addChip('fake-a');
+    });
+    // Still resolving: resolve() has captured the original appState, but
+    // hasn't returned yet.
+    expect(capturedForResolve.currentFile.content).toBe('one');
+
+    // An ordinary re-render happens while resolve() is still in flight (e.g.
+    // the user selected a different canvas node).
+    rerender({ appState: { currentFile: { path: 'a.astro', content: 'two' }, projectPath: null } });
+
+    // Let resolve() finish.
+    releaseResolve({});
+    await waitFor(() => expect(result.current.chips[0].status).toBe(CONTEXT_CHIP_STATUS.READY));
+
+    // The fix: computeStaleKey() must have been called with the SAME
+    // appState snapshot as resolve() (the "one" state captured before the
+    // await), not the "two" state that arrived mid-flight.
+    expect(capturedForStaleKey.currentFile.content).toBe('one');
+    expect(result.current.chips[0].data).toEqual({ value: 'one' });
+
+    // Proof the fix closes the race: the staleness effect only re-evaluates
+    // a chip when appState's reference changes (it already ran once, mid-
+    // flight, while this chip was still RESOLVING and so was skipped) — so
+    // re-render with a fresh "two"-content appState object to trigger it
+    // again now that the chip is READY. This must immediately mark the chip
+    // STALE, because the staleKey stored on the chip was derived from "one"
+    // and no longer matches computeStaleKey(current appState) = "two".
+    // Before the fix, staleKey was itself derived from "two" (the same
+    // state that arrived mid-flight), so this check would incorrectly stay
+    // READY forever — the bug this test guards against.
+    rerender({ appState: { currentFile: { path: 'a.astro', content: 'two' }, projectPath: null } });
+    expect(result.current.chips[0].status).toBe(CONTEXT_CHIP_STATUS.STALE);
+  });
+
   it('never auto-stales a chip whose resolver has no computeStaleKey', async () => {
     registerResolver(fakeResolver());
     const { result, rerender } = renderHook(
