@@ -2301,6 +2301,7 @@ export default function App() {
             currentFile={currentFileContext}
             projectPath={project.path}
             editorContext={editorContext}
+            devLog={devLog}
           />
         )}
 
