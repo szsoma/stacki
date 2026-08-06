@@ -4,6 +4,8 @@ export const CONTEXT_CHIP_TYPES = Object.freeze({
   SELECTED_ELEMENT: 'selected-element',
   CURRENT_PAGE: 'current-page',
   CURRENT_COMPONENT: 'current-component',
+  CONSOLE_ERRORS: 'console-errors',
+  GIT_DIFF: 'git-diff',
 });
 
 export const CONTEXT_CHIP_STATUS = Object.freeze({
