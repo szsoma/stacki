@@ -1,6 +1,9 @@
 export const CONTEXT_CHIP_TYPES = Object.freeze({
   CURRENT_FILE: 'current-file',
   SELECTED_FILES: 'selected-files',
+  SELECTED_ELEMENT: 'selected-element',
+  CURRENT_PAGE: 'current-page',
+  CURRENT_COMPONENT: 'current-component',
 });
 
 export const CONTEXT_CHIP_STATUS = Object.freeze({

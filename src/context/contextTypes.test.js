@@ -10,9 +10,12 @@ import {
 } from './contextTypes.js';
 
 describe('contextTypes', () => {
-  it('exposes the phase-1 chip types', () => {
+  it('exposes every registered chip type', () => {
     expect(CONTEXT_CHIP_TYPES.CURRENT_FILE).toBe('current-file');
     expect(CONTEXT_CHIP_TYPES.SELECTED_FILES).toBe('selected-files');
+    expect(CONTEXT_CHIP_TYPES.SELECTED_ELEMENT).toBe('selected-element');
+    expect(CONTEXT_CHIP_TYPES.CURRENT_PAGE).toBe('current-page');
+    expect(CONTEXT_CHIP_TYPES.CURRENT_COMPONENT).toBe('current-component');
   });
 
   it('estimates roughly one token per four characters', () => {
