@@ -66,9 +66,34 @@ function readProjectFile(root, rel, { fs = nodeFs, path = nodePath, maxBytes = 1
   return { rel, content, size: stat.size };
 }
 
+function ensureContextDir(root, { fs = nodeFs, path = nodePath } = {}) {
+  const dir = path.join(root, '.stacki', 'tmp', 'context');
+  fs.mkdirSync(dir, { recursive: true });
+  // A nested .gitignore that excludes everything under tmp/ keeps generated
+  // context bundles out of the user's repo regardless of what their own
+  // top-level .gitignore does or doesn't list — Stacki must never edit a
+  // file the user's project owns.
+  const gitignorePath = path.join(root, '.stacki', 'tmp', '.gitignore');
+  if (!fs.existsSync(gitignorePath)) {
+    fs.writeFileSync(gitignorePath, '*\n');
+  }
+  return dir;
+}
+
+function writeContextBundle(root, content, { fs = nodeFs, path = nodePath } = {}) {
+  if (!content || !content.trim()) {
+    throw new Error('Nothing to write — the composed context is empty.');
+  }
+  const dir = ensureContextDir(root, { fs, path });
+  const filename = `request-${Date.now()}.md`;
+  fs.writeFileSync(path.join(dir, filename), content, 'utf8');
+  return { relPath: `.stacki/tmp/context/${filename}` };
+}
+
 module.exports = {
   EXCLUDED_DIRS,
   isSensitiveFilename,
   listProjectFiles,
   readProjectFile,
+  writeContextBundle,
 };

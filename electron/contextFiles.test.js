@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import contextFilesModule from './contextFiles.js';
 
-const { isSensitiveFilename, listProjectFiles, readProjectFile } = contextFilesModule;
+const { isSensitiveFilename, listProjectFiles, readProjectFile, writeContextBundle } = contextFilesModule;
 
 // A tiny in-memory filesystem, just deep enough for these tests: a tree of
 // {name: {type:'dir', children} | {type:'file', content}} keyed by absolute
@@ -42,6 +42,16 @@ function fakeFs(tree) {
       readFileSync: (abs) => {
         if (!files.has(abs)) throw new Error(`ENOENT: ${abs}`);
         return files.get(abs);
+      },
+      // Sufficient for writeContextBundle's needs: it never lists a
+      // directory it creates, so a real recursive-mkdir simulation isn't
+      // needed — just record that the path exists.
+      mkdirSync: (dir) => {
+        if (!dirs.has(dir)) dirs.set(dir, []);
+      },
+      existsSync: (p) => files.has(p) || dirs.has(p),
+      writeFileSync: (p, content) => {
+        files.set(p, content);
       },
     },
     path: {
@@ -151,6 +161,34 @@ describe('readProjectFile', () => {
     const { fs, path } = fakeFs({ 'big.txt': { type: 'file', content: 'x'.repeat(20) } });
     expect(() => readProjectFile('/project', 'big.txt', { fs, path, maxBytes: 10 })).toThrow(
       'File too large to attach: big.txt',
+    );
+  });
+});
+
+describe('writeContextBundle', () => {
+  it('creates the context directory, a nested gitignore, and the bundle file', () => {
+    const { fs, path } = fakeFs({});
+    const result = writeContextBundle('/project', '## Stacki context', { fs, path });
+    expect(result.relPath).toMatch(/^\.stacki\/tmp\/context\/request-\d+\.md$/);
+    expect(fs.existsSync('/project/.stacki/tmp/.gitignore')).toBe(true);
+    expect(fs.readFileSync('/project/.stacki/tmp/.gitignore')).toBe('*\n');
+    expect(fs.readFileSync(`/project/${result.relPath}`)).toBe('## Stacki context');
+  });
+
+  it('does not overwrite an existing tmp gitignore', () => {
+    const { fs, path } = fakeFs({
+      '.stacki': { type: 'dir', children: { 'tmp': { type: 'dir', children: {
+        '.gitignore': { type: 'file', content: 'custom\n' },
+      } } } },
+    });
+    writeContextBundle('/project', 'content', { fs, path });
+    expect(fs.readFileSync('/project/.stacki/tmp/.gitignore')).toBe('custom\n');
+  });
+
+  it('refuses to write empty content', () => {
+    const { fs, path } = fakeFs({});
+    expect(() => writeContextBundle('/project', '   ', { fs, path })).toThrow(
+      'Nothing to write — the composed context is empty.',
     );
   });
 });

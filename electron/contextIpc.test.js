@@ -4,7 +4,7 @@ import contextIpcModule from './contextIpc.js';
 const { registerContextIpc } = contextIpcModule;
 
 // contextIpc.js is plain CommonJS and requires ./contextFiles and
-// ./astroParser internally, so list/read/serialize are injected as
+// ./astroParser internally, so list/read/serialize/write are injected as
 // constructor-style dependencies (same pattern as TerminalManager's injected
 // loadPty) rather than mocked via vi.mock — that keeps the test decoupled
 // from CJS/ESM interop details.
@@ -19,6 +19,7 @@ function setup({ projectRoot = '/projects/site' } = {}) {
   const listProjectFiles = vi.fn(() => ['package.json', 'src/pages/index.astro']);
   const readProjectFile = vi.fn((_root, rel) => ({ rel, content: `content of ${rel}`, size: 10 }));
   const serializeNode = vi.fn((node) => `<${node.name}></${node.name}>`);
+  const writeContextBundle = vi.fn((_root, content) => ({ relPath: `.stacki/tmp/context/request-1.md` }));
   const unregister = registerContextIpc({
     ipcMain,
     isAllowedSender: (event) => event === allowed,
@@ -26,14 +27,30 @@ function setup({ projectRoot = '/projects/site' } = {}) {
     listProjectFiles,
     readProjectFile,
     serializeNode,
+    writeContextBundle,
   });
-  return { ipcMain, handles, allowed, denied, unregister, listProjectFiles, readProjectFile, serializeNode };
+  return {
+    ipcMain,
+    handles,
+    allowed,
+    denied,
+    unregister,
+    listProjectFiles,
+    readProjectFile,
+    serializeNode,
+    writeContextBundle,
+  };
 }
 
 describe('context IPC', () => {
-  it('registers the three context channels', () => {
+  it('registers the four context channels', () => {
     const { handles } = setup();
-    expect([...handles.keys()]).toEqual(['context:listFiles', 'context:readFile', 'context:serializeNode']);
+    expect([...handles.keys()]).toEqual([
+      'context:listFiles',
+      'context:readFile',
+      'context:serializeNode',
+      'context:writeContextBundle',
+    ]);
   });
 
   it('lists project files for an allowed sender', async () => {
@@ -63,6 +80,14 @@ describe('context IPC', () => {
     expect(serializeNode).toHaveBeenCalledWith(node);
   });
 
+  it('writes a context bundle for an allowed sender', async () => {
+    const { handles, allowed, writeContextBundle } = setup();
+    await expect(
+      handles.get('context:writeContextBundle')(allowed, { markdown: '## Stacki context' }),
+    ).resolves.toEqual({ relPath: '.stacki/tmp/context/request-1.md' });
+    expect(writeContextBundle).toHaveBeenCalledWith('/projects/site', '## Stacki context');
+  });
+
   it('rejects an untrusted sender', async () => {
     const { handles, denied } = setup();
     await expect(handles.get('context:listFiles')(denied)).rejects.toThrow(
@@ -74,6 +99,9 @@ describe('context IPC', () => {
     await expect(handles.get('context:serializeNode')(denied, { node: {} })).rejects.toThrow(
       'Context IPC is available only to Stacki.',
     );
+    await expect(handles.get('context:writeContextBundle')(denied, { markdown: 'x' })).rejects.toThrow(
+      'Context IPC is available only to Stacki.',
+    );
   });
 
   it('rejects when no project is open', async () => {
@@ -83,11 +111,12 @@ describe('context IPC', () => {
     );
   });
 
-  it('unregisters all three handlers', () => {
+  it('unregisters all four handlers', () => {
     const { ipcMain, unregister } = setup();
     unregister();
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:listFiles');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:readFile');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:serializeNode');
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:writeContextBundle');
   });
 });

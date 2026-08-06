@@ -553,6 +553,7 @@ contextBridge.exposeInMainWorld('avb', {
   listContextFiles: invoke('context:listFiles'),
   readContextFile: invoke('context:readFile'),
   serializeNode: invoke('context:serializeNode'),
+  writeContextBundle: invoke('context:writeContextBundle'),
 
   // Assets (public/)
   listAssets: invoke('assets:list'),
