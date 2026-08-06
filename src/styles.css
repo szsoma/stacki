@@ -1073,6 +1073,15 @@ textarea { font-family: inherit; font-size: 12px; line-height: 1.5; resize: none
   font-size: 12px;
 }
 .context-send-row { display: flex; justify-content: flex-end; }
+.context-size-indicator {
+  margin-right: auto;
+  align-self: center;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.context-size-indicator.warning { color: var(--amber); }
+.context-size-indicator.large,
+.context-size-indicator.blocked { color: var(--red); }
 .context-send-button {
   padding: 6px 14px;
   border: none;

@@ -8,6 +8,16 @@ beforeEach(() => {
     listContextFiles: vi.fn(async () => ({ files: ['src/pages/index.astro'] })),
     readContextFile: vi.fn(async ({ rel }) => ({ rel, content: `content of ${rel}`, size: 10 })),
     serializeNode: vi.fn(async ({ node }) => ({ markup: `<${node.name}></${node.name}>` })),
+    getGitDiff: vi.fn(async () => ({
+      isRepo: true,
+      branch: 'main',
+      staged: '',
+      unstaged: '',
+      untracked: [],
+      recentCommits: [],
+      truncated: false,
+    })),
+    writeContextBundle: vi.fn(async () => ({ relPath: '.stacki/tmp/context/request-1.md' })),
   };
 });
 
@@ -113,9 +123,6 @@ describe('ContextChipBar', () => {
     fireEvent.click(screen.getByText('Current file'));
     await waitFor(() => expect(screen.getByText('Current file')).toBeInTheDocument());
 
-    // Change the file's content — the chip's stale key (a hash of path +
-    // content) no longer matches, so useTerminalContext's staleness effect
-    // flips it to STALE, while still holding onto its last-resolved data.
     rerender(
       <ContextChipBar
         currentFile={{ path: 'src/pages/index.astro', title: 'Frontmatter', language: 'javascript', content: 'const x = 2;' }}
@@ -124,9 +131,6 @@ describe('ContextChipBar', () => {
     );
 
     fireEvent.click(screen.getByText('Current file'));
-    // The popover's preview must still show the (now-stale) markdown —
-    // this exercises ContextChipBar's detailsMarkdown guard, which must
-    // compute markdown for 'stale' chips, not only 'ready' ones.
     expect(await screen.findByText(/const x = 1;/)).toBeInTheDocument();
   });
 
@@ -148,6 +152,71 @@ describe('ContextChipBar', () => {
     window.addEventListener('stacki:terminal-menu', listener);
     fireEvent.click(screen.getByRole('button', { name: 'Insert into terminal' }));
     expect(listener.mock.calls[0][0].detail.text).toContain('<h1></h1>');
+    window.removeEventListener('stacki:terminal-menu', listener);
+  });
+
+  it('offers Console errors only when the dev log has captured problems', () => {
+    const { rerender } = render(<ContextChipBar currentFile={null} projectPath="/projects/site" devLog="" />);
+    fireEvent.click(screen.getByText('+ Add context'));
+    expect(screen.queryByText('Console errors')).not.toBeInTheDocument();
+
+    rerender(<ContextChipBar currentFile={null} projectPath="/projects/site" devLog="Error: build failed" />);
+    expect(screen.getByText('Console errors')).toBeInTheDocument();
+  });
+
+  it('offers Git diff whenever a project is open', () => {
+    render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
+    fireEvent.click(screen.getByText('+ Add context'));
+    expect(screen.getByText('Git diff')).toBeInTheDocument();
+  });
+
+  it('shows a context-size indicator only once a chip is attached, reflecting the composed size', async () => {
+    const bigContent = 'x'.repeat(20000);
+    render(
+      <ContextChipBar
+        currentFile={{ path: 'big.astro', title: 'big', language: 'astro', content: bigContent }}
+        projectPath="/projects/site"
+      />,
+    );
+    expect(screen.queryByText(/Context: ~/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('+ Add context'));
+    fireEvent.click(screen.getByText('Current file'));
+    await waitFor(() => expect(screen.getByText('Current file')).toBeInTheDocument());
+
+    const indicator = await screen.findByText(/Context: ~/);
+    expect(indicator.className).toContain('warning');
+  });
+
+  it('writes a context-file bundle and inserts a short reference when a Git diff chip forces file delivery', async () => {
+    window.avb.getGitDiff = vi.fn(async () => ({
+      isRepo: true,
+      branch: 'main',
+      staged: '',
+      unstaged: 'diff --git a/x.astro b/x.astro\n+change',
+      untracked: [],
+      recentCommits: [],
+      truncated: false,
+    }));
+
+    render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
+    fireEvent.click(screen.getByText('+ Add context'));
+    fireEvent.click(screen.getByText('Git diff'));
+    await waitFor(() => expect(screen.getByText('Git diff')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByPlaceholderText('Ask Codex to…'), { target: { value: 'Continue this change.' } });
+    const listener = vi.fn();
+    window.addEventListener('stacki:terminal-menu', listener);
+    fireEvent.click(screen.getByRole('button', { name: 'Insert into terminal' }));
+
+    await waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    expect(window.avb.writeContextBundle).toHaveBeenCalledWith({
+      projectPath: '/projects/site',
+      markdown: expect.stringContaining('Continue this change.'),
+    });
+    expect(listener.mock.calls[0][0].detail.text).toBe(
+      'Read the Stacki context at:\n\n.stacki/tmp/context/request-1.md\n\nThen complete this request:\n\nContinue this change.',
+    );
     window.removeEventListener('stacki:terminal-menu', listener);
   });
 });

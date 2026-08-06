@@ -8,21 +8,32 @@ import { selectedFilesResolver } from '../context/selectedFilesResolver.js';
 import { selectedElementResolver } from '../context/selectedElementResolver.js';
 import { currentPageResolver } from '../context/currentPageResolver.js';
 import { currentComponentResolver } from '../context/currentComponentResolver.js';
+import { consoleErrorsResolver } from '../context/consoleErrorsResolver.js';
+import { gitDiffResolver } from '../context/gitDiffResolver.js';
 import { useTerminalContext } from '../context/useTerminalContext.js';
+import { estimateTokens } from '../context/contextTypes.js';
+import { sizeLevel } from '../context/contextSize.js';
 
-// Registering here (module scope, run once on import) keeps Phase 1's two
-// resolvers available wherever the chip bar is mounted, without a separate
-// bootstrap step. Re-registering on a hot reload is harmless — the registry
-// keys by type and simply replaces the previous entry.
+// Registering here (module scope, run once on import) keeps every resolver
+// available wherever the chip bar is mounted, without a separate bootstrap
+// step. Re-registering on a hot reload is harmless — the registry keys by
+// type and simply replaces the previous entry.
 registerResolver(currentFileResolver);
 registerResolver(selectedFilesResolver);
 registerResolver(selectedElementResolver);
 registerResolver(currentPageResolver);
 registerResolver(currentComponentResolver);
+registerResolver(consoleErrorsResolver);
+registerResolver(gitDiffResolver);
 
 const EMPTY_EDITOR_CONTEXT = {};
 
-export default function ContextChipBar({ currentFile, projectPath, editorContext = EMPTY_EDITOR_CONTEXT }) {
+export default function ContextChipBar({
+  currentFile,
+  projectPath,
+  editorContext = EMPTY_EDITOR_CONTEXT,
+  devLog = '',
+}) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [detailsId, setDetailsId] = useState(null);
 
@@ -30,12 +41,15 @@ export default function ContextChipBar({ currentFile, projectPath, editorContext
     () => ({
       currentFile,
       projectPath,
+      devLog,
       ...editorContext,
       readProjectFile: (rel) => window.avb.readContextFile({ projectPath, rel }),
       listProjectFiles: async () => (await window.avb.listContextFiles({ projectPath })).files,
       serializeNode: async (node) => (await window.avb.serializeNode({ node })).markup,
+      getGitDiff: () => window.avb.getGitDiff({ projectPath }),
+      writeContextBundle: (markdown) => window.avb.writeContextBundle({ projectPath, markdown }),
     }),
-    [currentFile, projectPath, editorContext],
+    [currentFile, projectPath, editorContext, devLog],
   );
 
   const {
@@ -76,6 +90,9 @@ export default function ContextChipBar({ currentFile, projectPath, editorContext
     },
     [addChip],
   );
+
+  const totalTokens = estimateTokens(composedMarkdown.length);
+  const sizeIndicatorLevel = sizeLevel(totalTokens);
 
   return (
     <div className="context-chip-bar">
@@ -123,6 +140,11 @@ export default function ContextChipBar({ currentFile, projectPath, editorContext
         onChange={(e) => setPrompt(e.target.value)}
       />
       <div className="context-send-row">
+        {chips.length > 0 && (
+          <span className={`context-size-indicator ${sizeIndicatorLevel}`}>
+            Context: ~{totalTokens.toLocaleString()} tokens
+          </span>
+        )}
         <button
           type="button"
           className="context-send-button"
