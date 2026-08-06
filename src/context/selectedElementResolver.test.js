@@ -148,6 +148,32 @@ describe('selectedElementResolver', () => {
     expect(key1).not.toBe(key2);
   });
 
+  it('produces a different stale key when an ancestor element-node has its class changed', () => {
+    // summarizeNode() folds an element's first CSS class into its label
+    // (e.g. `div.hero_heading` vs `div.hero_heading_renamed`), and
+    // resolve() renders ancestors via summarizeNode() into `data.ancestors`
+    // — so the stale key must react the same way, or the displayed
+    // ancestor path can drift from the key that's supposed to guard it.
+    const classedTree = [
+      {
+        id: 'wrap',
+        kind: 'element',
+        name: 'div',
+        props: { class: { type: 'string', value: 'hero_heading' } },
+        children: [TREE[0].children[0]],
+      },
+    ];
+    const key1 = selectedElementResolver.computeStaleKey(baseAppState({ nodeTree: classedTree }));
+    const renamedClassTree = [
+      {
+        ...classedTree[0],
+        props: { class: { type: 'string', value: 'hero_heading_renamed' } },
+      },
+    ];
+    const key2 = selectedElementResolver.computeStaleKey(baseAppState({ nodeTree: renamedClassTree }));
+    expect(key1).not.toBe(key2);
+  });
+
   it('produces a different stale key when the owner component moves', () => {
     const key1 = selectedElementResolver.computeStaleKey(baseAppState());
     const movedDefinitions = [

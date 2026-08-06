@@ -9,13 +9,16 @@ function hashString(text) {
   return hash.toString(36);
 }
 
-// Hashes the page's own fields plus the *entire* top-level node tree
-// (not just each top-level node's id) so that editing anything inside a
-// top-level node's subtree — a nested element's props, a deep descendant's
-// text — changes this key, not only additions/removals of top-level nodes.
-// JSON.stringify already recurses through each node's `children`, so
-// passing the real top-level array (rather than a list of ids) is enough;
-// no manual deep-walk needed.
+// Hashes the page's own fields plus the shallow, one-line-per-top-level-node
+// summaries (via summarizeNode) — the SAME shallow summaries resolve() puts
+// into `data.structure`. Hashing the raw top-level node tree instead (which
+// JSON.stringify would recurse through, including nested children) would
+// make this key sensitive to changes resolve()'s output can't see — e.g. a
+// grandchild's text or props changing — marking the chip stale for an edit
+// that a refresh would produce byte-identical data for. Only changes that
+// actually alter a top-level summary (e.g. a top-level node's id, kind, or
+// label — the label folds in an element's first CSS class, see
+// summarizeNode) should change this key.
 function pageRevisionKey(pageInfo, nodeTree) {
   if (!pageInfo?.editable) return null;
   const json = JSON.stringify({
@@ -23,7 +26,7 @@ function pageRevisionKey(pageInfo, nodeTree) {
     layoutName: pageInfo.layoutName,
     imports: pageInfo.imports,
     frontmatter: pageInfo.frontmatter,
-    topLevel: nodeTree || [],
+    structure: (nodeTree || []).map(summarizeNode),
   });
   return hashString(json);
 }

@@ -30,16 +30,24 @@ function nodeRevisionKey(node) {
   return `${node.id}:${hashString(json)}`;
 }
 
-// Ancestor identities (id/name/kind) plus the owning component's identity —
-// covers a renamed ancestor or a moved/renamed owner component, neither of
-// which touches the selected node's own subtree and so wouldn't otherwise
-// change nodeRevisionKey. Only used by computeStaleKey: resolve()'s
-// sourceRevision doesn't need this since ancestors/owner aren't part of the
-// serialized markup it hashes.
+// Ancestor identities plus the owning component's identity — covers a
+// renamed ancestor or a moved/renamed owner component, neither of which
+// touches the selected node's own subtree and so wouldn't otherwise change
+// nodeRevisionKey. Only used by computeStaleKey: resolve()'s sourceRevision
+// doesn't need this since ancestors/owner aren't part of the serialized
+// markup it hashes.
+//
+// Ancestors are hashed with summarizeNode() — the SAME function resolve()
+// uses to build `data.ancestors` (see resolve() below: `chain.slice(0,
+// -1).map(summarizeNode)`). summarizeNode()'s label folds in an element's
+// first CSS class (e.g. `h1.hero_heading`), so a shallower hand-rolled
+// {id, name, kind} shape would miss a class-only rename — the displayed
+// ancestor path would change on refresh without the stale key ever having
+// flagged it.
 function contextRevisionKey(appState, selectedNode) {
   const { nodeTree = [], componentDefinitions = [], loopContext } = appState;
   const chain = ancestorChain(nodeTree, selectedNode.id);
-  const ancestors = chain.slice(0, -1).map((node) => ({ id: node.id, name: node.name, kind: node.kind }));
+  const ancestors = chain.slice(0, -1).map(summarizeNode);
   const owner = findOwningComponent(nodeTree, selectedNode.id, componentDefinitions);
   const json = JSON.stringify({
     ancestors,

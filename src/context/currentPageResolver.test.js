@@ -91,12 +91,13 @@ describe('currentPageResolver', () => {
     expect(currentPageResolver.computeStaleKey(baseAppState({ pageInfo: null }))).toBeNull();
   });
 
-  it('detects staleness when a nested descendant changes without touching any top-level id', () => {
-    // Mutate props deep inside a child of the top-level 'layout' node,
-    // without adding/removing top-level nodes or changing any top-level
-    // node's id. A stale key derived only from `topLevelIds` would miss
-    // this; hashing the full top-level node content (including nested
-    // children) catches it.
+  it('does not go stale when only a nested descendant changes and no top-level summary changes', () => {
+    // The resolver's actual `data.structure` is a *shallow*, one-line
+    // summary per top-level node (nodeTree.map(summarizeNode)) — it never
+    // looks inside children. Mutating a grandchild's props here doesn't
+    // change any top-level node's summarizeNode() output (id/kind/label),
+    // so resolve() would produce byte-identical data on refresh — the key
+    // must not change either, or the chip flags a false "Updated" badge.
     const deepTree = [
       {
         id: 'layout',
@@ -132,6 +133,24 @@ describe('currentPageResolver', () => {
           },
         ],
       },
+    ];
+    const keyAfter = currentPageResolver.computeStaleKey(baseAppState({ nodeTree: mutatedTree }));
+
+    expect(keyAfter).toBe(keyBefore);
+  });
+
+  it('still goes stale when a top-level node summary changes (e.g. its class)', () => {
+    // A top-level node's own first CSS class feeds directly into
+    // summarizeNode()'s label (see nodeTree.js), so changing it changes
+    // what resolve() would put in `data.structure` — the key must change.
+    const tree = [
+      { id: 'layout', kind: 'element', name: 'div', props: { class: { type: 'string', value: 'old' } }, children: [] },
+    ];
+    const appState = baseAppState({ nodeTree: tree });
+    const keyBefore = currentPageResolver.computeStaleKey(appState);
+
+    const mutatedTree = [
+      { id: 'layout', kind: 'element', name: 'div', props: { class: { type: 'string', value: 'new' } }, children: [] },
     ];
     const keyAfter = currentPageResolver.computeStaleKey(baseAppState({ nodeTree: mutatedTree }));
 
