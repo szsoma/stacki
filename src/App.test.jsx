@@ -48,7 +48,12 @@ vi.mock('./panels/TerminalPanel.jsx', () => ({
         aria-label="Terminal panel integration"
         hidden={!active}
       >
-        <textarea aria-label="Terminal input" />
+        {/* Stands in for ContextChipBar's prompt textarea: a real field that
+            lives inside .terminal-panel but is NOT the terminal itself. */}
+        <textarea placeholder="Ask Codex to…" />
+        <div className="terminal-surface">
+          <textarea aria-label="Terminal input" />
+        </div>
       </section>
     );
   },
@@ -201,6 +206,29 @@ describe('App terminal integration', () => {
     expect(window.avb.nativePaste).toHaveBeenCalledTimes(1);
 
     field.remove();
+    window.removeEventListener('stacki:terminal-menu', onTerminalMenu);
+  });
+
+  // ContextChipBar's prompt textarea lives inside .terminal-panel (Task 14
+  // mounts it between the header and .terminal-surface), but it is not the
+  // terminal itself — copying/pasting there must behave like any other text
+  // field, not get redirected into the live shell.
+  it('does not route native copy and paste from the context prompt into the terminal', async () => {
+    await openProject();
+    fireEvent.click(screen.getByRole('button', { name: 'Terminal' }));
+    screen.getByPlaceholderText('Ask Codex to…').focus();
+
+    const actions = [];
+    const onTerminalMenu = (event) => actions.push(event.detail?.action);
+    window.addEventListener('stacki:terminal-menu', onTerminalMenu);
+
+    act(() => harness.menu.get('copy')());
+    act(() => harness.menu.get('paste')());
+
+    expect(actions).toEqual([]);
+    expect(window.avb.nativeCopy).toHaveBeenCalledTimes(1);
+    expect(window.avb.nativePaste).toHaveBeenCalledTimes(1);
+
     window.removeEventListener('stacki:terminal-menu', onTerminalMenu);
   });
 });

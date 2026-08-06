@@ -1360,9 +1360,13 @@ export default function App() {
         (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
       );
     };
+    // Scoped to .terminal-surface (the xterm host), not the whole
+    // .terminal-panel — ContextChipBar's prompt textarea and chip popovers
+    // also live inside .terminal-panel, and copy/paste there must behave
+    // like any other text field rather than redirect into the live shell.
     const inTerminal = () =>
       document.activeElement instanceof HTMLElement &&
-      !!document.activeElement.closest('.terminal-panel');
+      !!document.activeElement.closest('.terminal-surface');
     const terminalMenu = (action) => {
       window.dispatchEvent(
         new CustomEvent('stacki:terminal-menu', { detail: { action } })
