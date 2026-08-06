@@ -30,10 +30,24 @@ describe('selectedFilesResolver', () => {
       { path: 'src/components/Hero.astro', content: 'content of src/components/Hero.astro' },
       { path: 'src/pages/index.astro', content: 'content of src/pages/index.astro' },
     ]);
+    expect(result.data.secretWarnings).toEqual([]);
     expect(result.estimatedCharacters).toBe(
       'content of src/components/Hero.astro'.length + 'content of src/pages/index.astro'.length,
     );
     expect(result.sourceRevision).toEqual(expect.any(String));
+  });
+
+  it('surfaces a secret warning found in an attached file, naming the file', async () => {
+    const readProjectFile = vi.fn(async (rel) =>
+      rel === '.env.example'
+        ? { rel, content: 'AWS_KEY=AKIAABCDEFGHIJKLMNOP', size: 30 }
+        : { rel, content: 'ordinary content', size: 17 },
+    );
+    const result = await selectedFilesResolver.resolve(
+      { readProjectFile },
+      { paths: ['.env.example', 'src/pages/index.astro'] },
+    );
+    expect(result.data.secretWarnings).toEqual(['AWS access key in .env.example']);
   });
 
   it('rejects resolving with no paths selected', async () => {
@@ -49,6 +63,7 @@ describe('selectedFilesResolver', () => {
           { path: 'src/components/Hero.astro', content: '<h1>Hi</h1>' },
           { path: 'src/styles/global.css', content: 'body { margin: 0; }' },
         ],
+        secretWarnings: [],
       },
     };
     const markdown = selectedFilesResolver.renderMarkdown(snapshot);
@@ -59,5 +74,16 @@ describe('selectedFilesResolver', () => {
     expect(markdown).toContain('#### `src/styles/global.css`');
     expect(markdown).toContain('```css');
     expect(markdown).toContain('body { margin: 0; }');
+  });
+
+  it('renders a secret-warning callout when present', () => {
+    const snapshot = {
+      data: {
+        files: [{ path: '.env.example', content: 'AWS_KEY=AKIAABCDEFGHIJKLMNOP' }],
+        secretWarnings: ['AWS access key in .env.example'],
+      },
+    };
+    const markdown = selectedFilesResolver.renderMarkdown(snapshot);
+    expect(markdown).toContain('Possible secret detected: AWS access key in .env.example');
   });
 });

@@ -1,4 +1,5 @@
 import { CONTEXT_CHIP_TYPES } from './contextTypes.js';
+import { scanForSecrets } from './secretScan.js';
 
 const LANGUAGE_BY_EXTENSION = {
   js: 'javascript',
@@ -37,14 +38,23 @@ export const selectedFilesResolver = {
       const result = await appState.readProjectFile(rel);
       files.push({ path: rel, content: result.content });
     }
+    const secretWarnings = [
+      ...new Set(
+        files.flatMap((file) => scanForSecrets(file.content).map((name) => `${name} in ${file.path}`)),
+      ),
+    ];
     const estimatedCharacters = files.reduce((sum, file) => sum + file.content.length, 0);
     const sourceRevision = files.map((file) => `${file.path}:${file.content.length}`).join('|');
-    return { data: { files }, estimatedCharacters, sourceRevision };
+    return { data: { files, secretWarnings }, estimatedCharacters, sourceRevision };
   },
 
   renderMarkdown(snapshot) {
+    const { files, secretWarnings } = snapshot.data;
     const lines = ['### Selected files', ''];
-    for (const file of snapshot.data.files) {
+    if (secretWarnings.length > 0) {
+      lines.push(`> ⚠️ Possible secret detected: ${secretWarnings.join('; ')} — review before sending.`, '');
+    }
+    for (const file of files) {
       lines.push(`#### \`${file.path}\``, '', '```' + languageFor(file.path), file.content, '```', '');
     }
     return lines.join('\n').trimEnd();
