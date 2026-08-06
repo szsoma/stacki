@@ -700,4 +700,12 @@ describe('TerminalPanel editor context', () => {
     fireEvent.click(screen.getByText('+ Add context'));
     expect(screen.getByText('Selected element')).toBeInTheDocument();
   });
+
+  it('forwards devLog to the context chip bar', async () => {
+    render(<TerminalPanel active currentFile={null} projectPath="/projects/site" devLog="Error: build failed" />);
+    await waitFor(() => expect(window.avb.startTerminal).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText('+ Add context'));
+    expect(screen.getByText('Console errors')).toBeInTheDocument();
+  });
 });
