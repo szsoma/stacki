@@ -41,12 +41,23 @@ export const consoleErrorsResolver = {
     return {
       data,
       estimatedCharacters,
-      sourceRevision: hashString(appState.devLog || ''),
+      // Hash the *parsed* entries, not the raw devLog string: App.jsx
+      // appends every dev-server log chunk unthrottled (build progress, HMR
+      // messages, "ready in Nms"), and most of that traffic never shows up
+      // in the chip's rendered content at all. Hashing the raw string made
+      // this chip flip to STALE within seconds of being attached even
+      // though nothing it actually displays had changed — the same
+      // false-positive staleness bug fixed for other resolvers by scoping
+      // their stale-key hash to what they render. Hash the *unfiltered*
+      // parse (not the includeWarnings-filtered `entries` above) so this
+      // stays comparable to computeStaleKey()'s hash across an
+      // includeWarnings option change.
+      sourceRevision: hashString(JSON.stringify(parseDevLogEntries(appState.devLog))),
     };
   },
 
   computeStaleKey(appState) {
-    return appState.devLog ? hashString(appState.devLog) : null;
+    return appState.devLog ? hashString(JSON.stringify(parseDevLogEntries(appState.devLog))) : null;
   },
 
   renderMarkdown(snapshot) {

@@ -63,10 +63,20 @@ describe('consoleErrorsResolver', () => {
     expect(markdown).toContain('**warning** (`src/components/Bar.astro:12`) ×3: Warning: unused CSS selector .foo');
   });
 
-  it('produces a different stale key when the dev log changes', () => {
+  it('produces a different stale key when a new error/warning block is appended', () => {
     const key1 = consoleErrorsResolver.computeStaleKey({ devLog: LOG });
     const key2 = consoleErrorsResolver.computeStaleKey({ devLog: `${LOG}\n\nError: a new problem` });
     expect(key1).not.toBe(key2);
+  });
+
+  it('keeps the same stale key when the dev log grows with non-error/warning noise', () => {
+    // Build progress, HMR chatter, and "ready in Nms" lines are appended to
+    // devLog unthrottled but never show up in the chip's parsed entries —
+    // the stale key must be scoped to what actually gets rendered, or the
+    // chip would flip to stale within seconds of being attached.
+    const key1 = consoleErrorsResolver.computeStaleKey({ devLog: LOG });
+    const key2 = consoleErrorsResolver.computeStaleKey({ devLog: `${LOG}\n\n[vite] ready in 200ms` });
+    expect(key1).toBe(key2);
   });
 
   it('returns null stale key when there is no dev log', () => {
