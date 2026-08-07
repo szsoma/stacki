@@ -14,11 +14,46 @@ const DIFF_EXCLUDES = [
   'pnpm-lock.yaml',
   'yarn.lock',
 ];
+
+// Same categories of secret-bearing files that contextFiles.js's
+// SENSITIVE_FILENAME_PATTERNS refuses to read for the file-attachment path —
+// keep in sync with contextFiles.js's SENSITIVE_FILENAME_PATTERNS. Git's
+// pathspec magic uses fnmatch globs, not JS regex, so this is a hand-written
+// parallel list rather than a shared source.
+const SENSITIVE_DIFF_EXCLUDES = [
+  '**/.env',
+  '**/.env.*',
+  '**/*.pem',
+  '**/*.key',
+  '**/id_rsa',
+  '**/id_ed25519',
+  '**/credentials.json',
+  '**/service-account*.json',
+];
 const MAX_DIFF_CHARS = 20000;
 
 function diffPathspec() {
   const excludes = DIFF_EXCLUDES.flatMap((p) => [`:(exclude)${p}`, `:(exclude)${p}/**`]);
-  return ['--', '.', ...excludes];
+  const sensitiveExcludes = SENSITIVE_DIFF_EXCLUDES.map((p) => `:(exclude,glob)${p}`);
+  return ['--', '.', ...excludes, ...sensitiveExcludes];
+}
+
+// Mirrors contextFiles.js's isSensitiveFilename so the untracked-files list
+// returned by `git status --porcelain` (which isn't pathspec-filtered) can't
+// leak a sensitive filename either.
+const SENSITIVE_FILENAME_PATTERNS = [
+  /^\.env(\..*)?$/i,
+  /\.pem$/i,
+  /\.key$/i,
+  /^id_rsa$/i,
+  /^id_ed25519$/i,
+  /^credentials\.json$/i,
+  /^service-account.*\.json$/i,
+];
+
+function isSensitiveUntrackedPath(relPath) {
+  const base = relPath.split('/').pop();
+  return SENSITIVE_FILENAME_PATTERNS.some((pattern) => pattern.test(base));
 }
 
 function truncateDiff(text) {
@@ -73,16 +108,32 @@ function registerContextIpc({
       throw new Error('This project is not a Git repository.');
     }
 
-    const branch = (await runGit(root, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
+    // On an unborn branch (a freshly `git init`'d repo with no commits — see
+    // this file's git:init handler, a completely normal user path), both
+    // `rev-parse --abbrev-ref HEAD` and `git log` fail with a nonzero exit.
+    // Fall back the same way main.js's git:info handler does rather than
+    // rejecting the whole chip.
+    let branch;
+    try {
+      branch = (await runGit(root, ['rev-parse', '--abbrev-ref', 'HEAD'])).stdout.trim();
+    } catch {
+      branch = '(no commits yet)';
+    }
     const stagedRaw = (await runGit(root, ['diff', '--cached', ...diffPathspec()])).stdout;
     const unstagedRaw = (await runGit(root, ['diff', ...diffPathspec()])).stdout;
     const statusOut = (await runGit(root, ['status', '--porcelain'])).stdout;
-    const logOut = (await runGit(root, ['log', '-5', '--oneline'])).stdout;
+    let logOut = '';
+    try {
+      logOut = (await runGit(root, ['log', '-5', '--oneline'])).stdout;
+    } catch {
+      logOut = '';
+    }
 
     const untracked = statusOut
       .split('\n')
       .filter((line) => line.startsWith('?? '))
-      .map((line) => line.slice(3).replace(/^"|"$/g, ''));
+      .map((line) => line.slice(3).replace(/^"|"$/g, ''))
+      .filter((relPath) => !isSensitiveUntrackedPath(relPath));
     const recentCommits = logOut
       .split('\n')
       .map((line) => line.trim())

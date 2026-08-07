@@ -185,12 +185,60 @@ describe('context:gitDiff', () => {
     );
   });
 
+  it('excludes the same sensitive-file categories the file-attachment path blocks from the diff pathspec', async () => {
+    const runGit = fakeRunGit();
+    const { handles, allowed } = setup({ runGit });
+    await handles.get('context:gitDiff')(allowed);
+    const diffCall = runGit.mock.calls.find((call) => call[1][0] === 'diff' && !call[1].includes('--cached'));
+    expect(diffCall[1]).toEqual(
+      expect.arrayContaining([
+        ':(exclude,glob)**/.env',
+        ':(exclude,glob)**/.env.*',
+        ':(exclude,glob)**/*.pem',
+        ':(exclude,glob)**/*.key',
+        ':(exclude,glob)**/id_rsa',
+        ':(exclude,glob)**/id_ed25519',
+        ':(exclude,glob)**/credentials.json',
+        ':(exclude,glob)**/service-account*.json',
+      ]),
+    );
+  });
+
+  it('excludes sensitive filenames from the untracked-files list', async () => {
+    const runGit = fakeRunGit({
+      'status --porcelain': {
+        stdout: '?? new-file.txt\n?? .env.production\n?? server.key\n?? config/credentials.json\n',
+        stderr: '',
+      },
+    });
+    const { handles, allowed } = setup({ runGit });
+    const result = await handles.get('context:gitDiff')(allowed);
+    expect(result.untracked).toEqual(['new-file.txt']);
+  });
+
   it('truncates an oversized diff and reports it as truncated', async () => {
     const runGit = fakeRunGit({ 'diff': { stdout: 'x'.repeat(25000), stderr: '' } });
     const { handles, allowed } = setup({ runGit });
     const result = await handles.get('context:gitDiff')(allowed);
     expect(result.truncated).toBe(true);
     expect(result.unstaged.length).toBeLessThan(25000);
+  });
+
+  it('falls back to placeholder branch/commits on an unborn branch (a freshly git-inited repo with no commits)', async () => {
+    const runGit = vi.fn(async (_root, args) => {
+      const key = args[0] === 'diff' ? (args.includes('--cached') ? 'diff --cached' : 'diff') : args.join(' ');
+      if (key === 'rev-parse --is-inside-work-tree') return { stdout: 'true\n', stderr: '' };
+      if (key === 'rev-parse --abbrev-ref HEAD') throw new Error('fatal: ambiguous argument HEAD');
+      if (key === 'log -5 --oneline') throw new Error('fatal: your current branch does not have any commits yet');
+      if (key === 'diff --cached') return { stdout: '', stderr: '' };
+      if (key === 'diff') return { stdout: '', stderr: '' };
+      if (key === 'status --porcelain') return { stdout: '', stderr: '' };
+      throw new Error(`unexpected git args: ${args.join(' ')}`);
+    });
+    const { handles, allowed } = setup({ runGit });
+    const result = await handles.get('context:gitDiff')(allowed);
+    expect(result.branch).toBe('(no commits yet)');
+    expect(result.recentCommits).toEqual([]);
   });
 
   it('rejects when the project is not a Git repository', async () => {
