@@ -66,6 +66,8 @@ function readProjectFile(root, rel, { fs = nodeFs, path = nodePath, maxBytes = 1
   return { rel, content, size: stat.size };
 }
 
+const CONTEXT_BUNDLE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 function ensureContextDir(root, { fs = nodeFs, path = nodePath } = {}) {
   const dir = path.join(root, '.stacki', 'tmp', 'context');
   fs.mkdirSync(dir, { recursive: true });
@@ -80,11 +82,43 @@ function ensureContextDir(root, { fs = nodeFs, path = nodePath } = {}) {
   return dir;
 }
 
+// Nothing else prunes this directory: every "Insert into terminal" that
+// triggers file-mode delivery leaves a permanent plaintext bundle (possibly
+// containing a Git diff or file contents a scanForSecrets warning already
+// flagged) unless something cleans up after it. Keep this simple — list,
+// filter by mtime age, unlink — no external dependencies.
+function pruneOldContextBundles(dir, { fs = nodeFs, path = nodePath } = {}) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  for (const name of entries) {
+    const abs = path.join(dir, name);
+    let stat;
+    try {
+      stat = fs.statSync(abs);
+    } catch {
+      continue;
+    }
+    if (now - stat.mtimeMs > CONTEXT_BUNDLE_MAX_AGE_MS) {
+      try {
+        fs.unlinkSync(abs);
+      } catch {
+        /* best-effort cleanup — a failed unlink shouldn't block writing the new bundle */
+      }
+    }
+  }
+}
+
 function writeContextBundle(root, content, { fs = nodeFs, path = nodePath } = {}) {
   if (!content || !content.trim()) {
     throw new Error('Nothing to write — the composed context is empty.');
   }
   const dir = ensureContextDir(root, { fs, path });
+  pruneOldContextBundles(dir, { fs, path });
   const filename = `request-${Date.now()}.md`;
   fs.writeFileSync(path.join(dir, filename), content, 'utf8');
   return { relPath: `.stacki/tmp/context/${filename}` };

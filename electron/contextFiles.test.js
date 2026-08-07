@@ -8,6 +8,7 @@ const { isSensitiveFilename, listProjectFiles, readProjectFile, writeContextBund
 // path segments joined with '/'.
 function fakeFs(tree) {
   const files = new Map(); // abs path -> content
+  const mtimes = new Map(); // abs path -> mtimeMs
   const dirs = new Map(); // abs path -> [{name, isDir}]
 
   const walk = (prefix, node) => {
@@ -20,6 +21,7 @@ function fakeFs(tree) {
       } else {
         entries.push({ name, isDir: false });
         files.set(abs, child.content);
+        mtimes.set(abs, child.mtimeMs ?? Date.now());
       }
     }
     dirs.set(prefix, entries);
@@ -37,7 +39,7 @@ function fakeFs(tree) {
       },
       statSync: (abs) => {
         if (!files.has(abs)) throw new Error(`ENOENT: ${abs}`);
-        return { isFile: () => true, size: files.get(abs).length };
+        return { isFile: () => true, size: files.get(abs).length, mtimeMs: mtimes.get(abs) };
       },
       readFileSync: (abs) => {
         if (!files.has(abs)) throw new Error(`ENOENT: ${abs}`);
@@ -52,6 +54,23 @@ function fakeFs(tree) {
       existsSync: (p) => files.has(p) || dirs.has(p),
       writeFileSync: (p, content) => {
         files.set(p, content);
+        mtimes.set(p, Date.now());
+        const dir = p.slice(0, p.lastIndexOf('/'));
+        const name = p.slice(p.lastIndexOf('/') + 1);
+        const entries = dirs.get(dir) || [];
+        if (!entries.some((e) => e.name === name)) {
+          entries.push({ name, isDir: false });
+          dirs.set(dir, entries);
+        }
+      },
+      unlinkSync: (p) => {
+        if (!files.has(p)) throw new Error(`ENOENT: ${p}`);
+        files.delete(p);
+        mtimes.delete(p);
+        const dir = p.slice(0, p.lastIndexOf('/'));
+        const name = p.slice(p.lastIndexOf('/') + 1);
+        const entries = dirs.get(dir) || [];
+        dirs.set(dir, entries.filter((e) => e.name !== name));
       },
     },
     path: {
@@ -190,5 +209,23 @@ describe('writeContextBundle', () => {
     expect(() => writeContextBundle('/project', '   ', { fs, path })).toThrow(
       'Nothing to write — the composed context is empty.',
     );
+  });
+
+  it('prunes bundle files older than 24 hours while leaving recent ones in place', () => {
+    const oldMtime = Date.now() - 25 * 60 * 60 * 1000;
+    const recentMtime = Date.now() - 1000;
+    const { fs, path } = fakeFs({
+      '.stacki': { type: 'dir', children: { 'tmp': { type: 'dir', children: {
+        'context': { type: 'dir', children: {
+          'old-file.md': { type: 'file', content: 'stale bundle', mtimeMs: oldMtime },
+          'recent-file.md': { type: 'file', content: 'fresh bundle', mtimeMs: recentMtime },
+        } },
+      } } } },
+    });
+
+    writeContextBundle('/project', 'new content', { fs, path });
+
+    expect(fs.existsSync('/project/.stacki/tmp/context/old-file.md')).toBe(false);
+    expect(fs.existsSync('/project/.stacki/tmp/context/recent-file.md')).toBe(true);
   });
 });
