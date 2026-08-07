@@ -142,8 +142,13 @@ export function useTerminalContext(appState) {
     }
 
     const requestText = prompt.trim();
-    void appStateRef.current
-      .writeContextBundle(composedMarkdown)
+    // Route the call through Promise.resolve().then(...) rather than calling
+    // writeContextBundle directly: if it throws synchronously (e.g. it's
+    // undefined, or throws before returning a promise) rather than returning
+    // a rejected promise, that throw would otherwise escape uncaught out of
+    // this click handler instead of hitting the .catch() fallback below.
+    void Promise.resolve()
+      .then(() => appStateRef.current.writeContextBundle(composedMarkdown))
       .then(({ relPath }) => {
         dispatch(`Read the Stacki context at:\n\n${relPath}\n\nThen complete this request:\n\n${requestText}`);
       })
