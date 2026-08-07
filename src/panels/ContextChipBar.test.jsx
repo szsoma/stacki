@@ -123,6 +123,9 @@ describe('ContextChipBar', () => {
     fireEvent.click(screen.getByText('Current file'));
     await waitFor(() => expect(screen.getByText('Current file')).toBeInTheDocument());
 
+    // Change the file's content — the chip's stale key (a hash of path +
+    // content) no longer matches, so useTerminalContext's staleness effect
+    // flips it to STALE, while still holding onto its last-resolved data.
     rerender(
       <ContextChipBar
         currentFile={{ path: 'src/pages/index.astro', title: 'Frontmatter', language: 'javascript', content: 'const x = 2;' }}
@@ -131,6 +134,9 @@ describe('ContextChipBar', () => {
     );
 
     fireEvent.click(screen.getByText('Current file'));
+    // The popover's preview must still show the (now-stale) markdown —
+    // this exercises ContextChipBar's detailsMarkdown guard, which must
+    // compute markdown for 'stale' chips, not only 'ready' ones.
     expect(await screen.findByText(/const x = 1;/)).toBeInTheDocument();
   });
 
