@@ -44,12 +44,13 @@ export const gitDiffResolver = {
   },
 
   renderMarkdown(snapshot) {
-    const { branch, staged, unstaged, untracked, recentCommits, truncated, secretWarnings } = snapshot.data;
+    const { branch, scope, staged, unstaged, untracked, recentCommits, truncated, secretWarnings } = snapshot.data;
     const lines = ['### Git diff', ''];
     if (secretWarnings.length > 0) {
       lines.push(`> ⚠️ Possible secret detected (${secretWarnings.join(', ')}) — review before sending.`, '');
     }
     lines.push(`- Branch: \`${branch}\``);
+    lines.push(`- Scope: ${scope}`);
     if (recentCommits.length > 0) lines.push(`- Recent commits: ${recentCommits.join(' · ')}`);
     if (untracked.length > 0) lines.push(`- Untracked files: ${untracked.join(', ')}`);
     if (staged.trim()) lines.push('', 'Staged:', '', '```diff', staged.trim(), '```');

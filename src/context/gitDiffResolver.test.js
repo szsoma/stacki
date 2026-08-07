@@ -90,6 +90,7 @@ describe('gitDiffResolver', () => {
     const snapshot = {
       data: {
         branch: 'main',
+        scope: 'staged',
         staged: 'diff --git a/staged.txt b/staged.txt\n+staged change\n',
         unstaged: '',
         untracked: ['new-file.txt'],
@@ -101,6 +102,7 @@ describe('gitDiffResolver', () => {
     const markdown = gitDiffResolver.renderMarkdown(snapshot);
     expect(markdown).toContain('### Git diff');
     expect(markdown).toContain('Branch: `main`');
+    expect(markdown).toContain('Scope: staged');
     expect(markdown).toContain('Recent commits: abc123 Fix bug');
     expect(markdown).toContain('Untracked files: new-file.txt');
     expect(markdown).toContain('```diff');
@@ -111,6 +113,7 @@ describe('gitDiffResolver', () => {
     const snapshot = {
       data: {
         branch: 'main',
+        scope: 'all',
         staged: '',
         unstaged: '+AWS_KEY = "AKIAABCDEFGHIJKLMNOP"',
         untracked: [],
