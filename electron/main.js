@@ -554,6 +554,7 @@ registerContextIpc({
     event.senderFrame === mainWindow.webContents.mainFrame &&
     isTrustedRendererUrl(event.senderFrame.url),
   getProjectRoot: () => openProjectRoot,
+  getMainWindow: () => mainWindow,
   runGit: (root, args) => git(root, args),
 });
 

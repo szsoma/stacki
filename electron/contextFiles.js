@@ -124,10 +124,26 @@ function writeContextBundle(root, content, { fs = nodeFs, path = nodePath } = {}
   return { relPath: `.stacki/tmp/context/${filename}` };
 }
 
+function capturePreview(root, browserWindow, rect, { fs = nodeFs, path = nodePath } = {}) {
+  const image = browserWindow.webContents.capturePage({
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  });
+  if (image.isEmpty()) throw new Error('The captured preview region is empty.');
+  const dir = ensureContextDir(root, { fs, path });
+  pruneOldContextBundles(dir, { fs, path });
+  const filename = `preview-${Date.now()}.png`;
+  fs.writeFileSync(path.join(dir, filename), image.toPNG());
+  return { relPath: `.stacki/tmp/context/${filename}` };
+}
+
 module.exports = {
   EXCLUDED_DIRS,
   isSensitiveFilename,
   listProjectFiles,
   readProjectFile,
   writeContextBundle,
+  capturePreview,
 };
