@@ -18,6 +18,8 @@ describe('contextTypes', () => {
     expect(CONTEXT_CHIP_TYPES.CURRENT_COMPONENT).toBe('current-component');
     expect(CONTEXT_CHIP_TYPES.CONSOLE_ERRORS).toBe('console-errors');
     expect(CONTEXT_CHIP_TYPES.GIT_DIFF).toBe('git-diff');
+    expect(CONTEXT_CHIP_TYPES.PREVIEW_SCREENSHOT).toBe('preview-screenshot');
+    expect(CONTEXT_CHIP_TYPES.CMS_SCHEMA).toBe('cms-schema');
   });
 
   it('estimates roughly one token per four characters', () => {

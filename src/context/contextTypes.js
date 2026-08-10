@@ -6,6 +6,8 @@ export const CONTEXT_CHIP_TYPES = Object.freeze({
   CURRENT_COMPONENT: 'current-component',
   CONSOLE_ERRORS: 'console-errors',
   GIT_DIFF: 'git-diff',
+  PREVIEW_SCREENSHOT: 'preview-screenshot',
+  CMS_SCHEMA: 'cms-schema',
 });
 
 export const CONTEXT_CHIP_STATUS = Object.freeze({
