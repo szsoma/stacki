@@ -66,6 +66,7 @@ export default function PreviewPane({
   focusPath,
   device,
   onDevice,
+  onFrameMounted,
 }) {
   // The breakpoint lives in App so a re-mount of this pane can't silently
   // kick the user out of a view (which would reload every preview iframe).
@@ -185,6 +186,11 @@ export default function PreviewPane({
   // only animate the frame width between two lengths, not px ↔ 100%.
   const wrapRef = React.useRef(null);
   const frameRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (onFrameMounted) onFrameMounted(frameRef);
+  }, [onFrameMounted]);
+
   const [wrapWidth, setWrapWidth] = React.useState(null);
   React.useLayoutEffect(() => {
     const el = wrapRef.current;

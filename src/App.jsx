@@ -360,6 +360,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [hoverNodeId, setHoverNodeId] = useState(null); // navigator row hover
   const [devUrl, setDevUrl] = useState(null);
+  const previewFrameRef = useRef(null);
   const [devStatus, setDevStatus] = useState('off'); // off | starting | on
   const [devLog, setDevLog] = useState('');
   const [devDiag, setDevDiag] = useState(null); // {kind, nodePath, nodeVersion, …}
@@ -2069,6 +2070,14 @@ export default function App() {
     [selectedNode, model, loopContext, insertables, currentPage, project?.path, currentLayoutName],
   );
 
+  const getPreviewRect = useCallback(() => {
+    const frame = previewFrameRef.current;
+    if (!frame) return null;
+    const r = frame.getBoundingClientRect();
+    if (!r || r.width <= 0 || r.height <= 0) return null;
+    return { x: r.x, y: r.y, width: r.width, height: r.height, selectedRect: null };
+  }, []);
+
   // Returns whether the selection actually has a code editor, so the Enter
   // shortcut below knows whether it handled the key.
   const openCodeWindow = () => {
@@ -2302,6 +2311,8 @@ export default function App() {
             projectPath={project.path}
             editorContext={editorContext}
             devLog={devLog}
+            devUrl={devUrl}
+            getPreviewRect={getPreviewRect}
           />
         )}
 
@@ -2433,6 +2444,7 @@ export default function App() {
               const n = model && nodeAtPath(model.nodes, p.split('.').map(Number));
               if (n?.kind === 'component') openComponent(n.name, p);
             }}
+            onFrameMounted={(ref) => { previewFrameRef.current = ref; }}
           />
 
           {/* The CMS edits content, not layout — it covers the canvas rather
