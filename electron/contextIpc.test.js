@@ -41,14 +41,21 @@ function setup({ projectRoot = '/projects/site', runGit = fakeRunGit() } = {}) {
   const readProjectFile = vi.fn((_root, rel) => ({ rel, content: `content of ${rel}`, size: 10 }));
   const serializeNode = vi.fn((node) => `<${node.name}></${node.name}>`);
   const writeContextBundle = vi.fn((_root, content) => ({ relPath: `.stacki/tmp/context/request-1.md` }));
+  const fauxWindow = { webContents: { capturePage: vi.fn() } };
+  const getMainWindow = vi.fn(() => fauxWindow);
+  const capturePreview = vi.fn((_root, _bw, rect) => ({
+    relPath: `.stacki/tmp/context/preview-${Date.now()}.png`,
+  }));
   const unregister = registerContextIpc({
     ipcMain,
     isAllowedSender: (event) => event === allowed,
     getProjectRoot: () => projectRoot,
+    getMainWindow,
     listProjectFiles,
     readProjectFile,
     serializeNode,
     writeContextBundle,
+    capturePreview,
     runGit,
   });
   return {
@@ -61,12 +68,14 @@ function setup({ projectRoot = '/projects/site', runGit = fakeRunGit() } = {}) {
     readProjectFile,
     serializeNode,
     writeContextBundle,
+    capturePreview,
+    getMainWindow,
     runGit,
   };
 }
 
 describe('context IPC', () => {
-  it('registers the five context channels', () => {
+  it('registers the six context channels', () => {
     const { handles } = setup();
     expect([...handles.keys()]).toEqual([
       'context:listFiles',
@@ -74,6 +83,7 @@ describe('context IPC', () => {
       'context:serializeNode',
       'context:writeContextBundle',
       'context:gitDiff',
+      'context:capturePreview',
     ]);
   });
 
@@ -129,6 +139,9 @@ describe('context IPC', () => {
     await expect(handles.get('context:gitDiff')(denied)).rejects.toThrow(
       'Context IPC is available only to Stacki.',
     );
+    await expect(handles.get('context:capturePreview')(denied, { x: 0, y: 0, width: 100, height: 100 })).rejects.toThrow(
+      'Context IPC is available only to Stacki.',
+    );
   });
 
   it('rejects when no project is open', async () => {
@@ -138,7 +151,7 @@ describe('context IPC', () => {
     );
   });
 
-  it('unregisters all five handlers', () => {
+  it('unregisters all six handlers', () => {
     const { ipcMain, unregister } = setup();
     unregister();
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:listFiles');
@@ -146,6 +159,7 @@ describe('context IPC', () => {
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:serializeNode');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:writeContextBundle');
     expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:gitDiff');
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith('context:capturePreview');
   });
 });
 
@@ -251,5 +265,57 @@ describe('context:gitDiff', () => {
     await expect(handles.get('context:gitDiff')(allowed)).rejects.toThrow(
       'This project is not a Git repository.',
     );
+  });
+});
+
+describe('context:capturePreview', () => {
+  it('calls capturePreview with root, mainWindow, and rounded rect', async () => {
+    const { handles, allowed, capturePreview, getMainWindow } = setup();
+    const payload = { x: 10.7, y: 20.3, width: 100.1, height: 200.9 };
+    const result = await handles.get('context:capturePreview')(allowed, payload);
+    expect(capturePreview).toHaveBeenCalledWith('/projects/site', getMainWindow(), {
+      x: 11,
+      y: 20,
+      width: 100,
+      height: 201,
+    });
+    expect(result.relPath).toMatch(/^\.stacki\/tmp\/context\/preview-/);
+  });
+
+  it('clamps negative coordinates to zero', async () => {
+    const { handles, allowed, capturePreview } = setup();
+    await handles.get('context:capturePreview')(allowed, { x: -50, y: -5, width: 100, height: 100 });
+    expect(capturePreview).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ x: 0, y: 0, width: 100, height: 100 }),
+    );
+  });
+
+  it('clamps zero-area rect to at least 1x1', async () => {
+    const { handles, allowed, capturePreview } = setup();
+    await handles.get('context:capturePreview')(allowed, { x: 0, y: 0, width: 0, height: 0 });
+    expect(capturePreview).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ width: 1, height: 1 }),
+    );
+  });
+
+  it('defaults missing fields to safe values', async () => {
+    const { handles, allowed, capturePreview } = setup();
+    await handles.get('context:capturePreview')(allowed, {});
+    expect(capturePreview).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { x: 0, y: 0, width: 1, height: 1 },
+    );
+  });
+
+  it('rejects when no project is open', async () => {
+    const { handles, allowed } = setup({ projectRoot: null });
+    await expect(
+      handles.get('context:capturePreview')(allowed, { x: 0, y: 0, width: 100, height: 100 }),
+    ).rejects.toThrow('Open a project before attaching context.');
   });
 });

@@ -10,6 +10,8 @@ import { currentPageResolver } from '../context/currentPageResolver.js';
 import { currentComponentResolver } from '../context/currentComponentResolver.js';
 import { consoleErrorsResolver } from '../context/consoleErrorsResolver.js';
 import { gitDiffResolver } from '../context/gitDiffResolver.js';
+import { previewScreenshotResolver } from '../context/previewScreenshotResolver.js';
+import { cmsSchemaResolver } from '../context/cmsSchemaResolver.js';
 import { useTerminalContext } from '../context/useTerminalContext.js';
 import { estimateTokens } from '../context/contextTypes.js';
 import { sizeLevel } from '../context/contextSize.js';
@@ -25,6 +27,8 @@ registerResolver(currentPageResolver);
 registerResolver(currentComponentResolver);
 registerResolver(consoleErrorsResolver);
 registerResolver(gitDiffResolver);
+registerResolver(previewScreenshotResolver);
+registerResolver(cmsSchemaResolver);
 
 const EMPTY_EDITOR_CONTEXT = {};
 
@@ -33,6 +37,8 @@ export default function ContextChipBar({
   projectPath,
   editorContext = EMPTY_EDITOR_CONTEXT,
   devLog = '',
+  devUrl = null,
+  getPreviewRect = null,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [detailsId, setDetailsId] = useState(null);
@@ -42,14 +48,17 @@ export default function ContextChipBar({
       currentFile,
       projectPath,
       devLog,
+      devUrl,
+      getPreviewRect,
       ...editorContext,
       readProjectFile: (rel) => window.avb.readContextFile({ projectPath, rel }),
       listProjectFiles: async () => (await window.avb.listContextFiles({ projectPath })).files,
       serializeNode: async (node) => (await window.avb.serializeNode({ node })).markup,
       getGitDiff: () => window.avb.getGitDiff({ projectPath }),
       writeContextBundle: (markdown) => window.avb.writeContextBundle({ projectPath, markdown }),
+      capturePreview: (rect) => window.avb.capturePreview({ projectPath, ...rect }),
     }),
-    [currentFile, projectPath, editorContext, devLog],
+    [currentFile, projectPath, editorContext, devLog, devUrl, getPreviewRect],
   );
 
   const {
@@ -64,6 +73,11 @@ export default function ContextChipBar({
   } = useTerminalContext(appState);
 
   const availableResolvers = listResolvers().filter((resolver) => resolver.isAvailable(appState));
+
+  const suggestedChips = useMemo(() => {
+    if (chips.length > 0 || prompt.trim()) return [];
+    return availableResolvers.slice(0, 3);
+  }, [availableResolvers, chips.length, prompt]);
 
   const detailsChip = chips.find((chip) => chip.id === detailsId) || null;
   const detailsMarkdown = useMemo(() => {
@@ -104,6 +118,7 @@ export default function ContextChipBar({
           {pickerOpen && (
             <ContextPicker
               resolvers={availableResolvers}
+              prompt={prompt}
               onPickSimple={pickSimple}
               onPickFiles={pickFiles}
               onListFiles={appState.listProjectFiles}
@@ -111,6 +126,20 @@ export default function ContextChipBar({
             />
           )}
         </div>
+        {chips.length === 0 && suggestedChips.length > 0 && (
+          <>
+            {suggestedChips.map((resolver) => (
+              <button
+                key={resolver.type}
+                type="button"
+                className="context-suggested-chip"
+                onClick={() => addChip(resolver.type)}
+              >
+                {resolver.label}
+              </button>
+            ))}
+          </>
+        )}
         {chips.map((chip) => (
           <div className="context-chip-wrap" key={chip.id}>
             <ContextChip

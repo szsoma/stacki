@@ -66,10 +66,12 @@ function registerContextIpc({
   ipcMain,
   isAllowedSender,
   getProjectRoot,
+  getMainWindow,
   listProjectFiles = contextFiles.listProjectFiles,
   readProjectFile = contextFiles.readProjectFile,
   serializeNode = (node) => astroParser.serializeNodes([node]),
   writeContextBundle = contextFiles.writeContextBundle,
+  capturePreview = contextFiles.capturePreview,
   runGit,
 }) {
   const assertAllowed = (event) => {
@@ -153,11 +155,23 @@ function registerContextIpc({
     };
   };
 
+  const capture = async (event, payload) => {
+    assertAllowed(event);
+    const rect = {
+      x: Math.max(0, Math.round(payload?.x ?? 0)),
+      y: Math.max(0, Math.round(payload?.y ?? 0)),
+      width: Math.max(1, Math.round(payload?.width ?? 1)),
+      height: Math.max(1, Math.round(payload?.height ?? 1)),
+    };
+    return capturePreview(requireRoot(), getMainWindow(), rect);
+  };
+
   ipcMain.handle('context:listFiles', listFiles);
   ipcMain.handle('context:readFile', readFile);
   ipcMain.handle('context:serializeNode', serialize);
   ipcMain.handle('context:writeContextBundle', writeBundle);
   ipcMain.handle('context:gitDiff', gitDiff);
+  ipcMain.handle('context:capturePreview', capture);
 
   return () => {
     ipcMain.removeHandler('context:listFiles');
@@ -165,6 +179,7 @@ function registerContextIpc({
     ipcMain.removeHandler('context:serializeNode');
     ipcMain.removeHandler('context:writeContextBundle');
     ipcMain.removeHandler('context:gitDiff');
+    ipcMain.removeHandler('context:capturePreview');
   };
 }
 

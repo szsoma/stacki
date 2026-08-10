@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -698,7 +699,7 @@ describe('TerminalPanel editor context', () => {
     await waitFor(() => expect(window.avb.startTerminal).toHaveBeenCalled());
 
     fireEvent.click(screen.getByText('+ Add context'));
-    expect(screen.getByText('Selected element')).toBeInTheDocument();
+    expect(within(document.querySelector('.context-picker')).getByText('Selected element')).toBeInTheDocument();
   });
 
   it('forwards devLog to the context chip bar', async () => {
@@ -706,6 +707,6 @@ describe('TerminalPanel editor context', () => {
     await waitFor(() => expect(window.avb.startTerminal).toHaveBeenCalled());
 
     fireEvent.click(screen.getByText('+ Add context'));
-    expect(screen.getByText('Console errors')).toBeInTheDocument();
+    expect(within(document.querySelector('.context-picker')).getByText('Console errors')).toBeInTheDocument();
   });
 });
