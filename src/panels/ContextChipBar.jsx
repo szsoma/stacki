@@ -74,6 +74,11 @@ export default function ContextChipBar({
 
   const availableResolvers = listResolvers().filter((resolver) => resolver.isAvailable(appState));
 
+  const suggestedChips = useMemo(() => {
+    if (chips.length > 0 || prompt.trim()) return [];
+    return availableResolvers.slice(0, 3);
+  }, [availableResolvers, chips.length, prompt]);
+
   const detailsChip = chips.find((chip) => chip.id === detailsId) || null;
   const detailsMarkdown = useMemo(() => {
     // Both 'ready' and 'stale' chips carry usable `data` (withStale() never
@@ -121,6 +126,20 @@ export default function ContextChipBar({
             />
           )}
         </div>
+        {chips.length === 0 && suggestedChips.length > 0 && (
+          <>
+            {suggestedChips.map((resolver) => (
+              <button
+                key={resolver.type}
+                type="button"
+                className="context-suggested-chip"
+                onClick={() => addChip(resolver.type)}
+              >
+                {resolver.label}
+              </button>
+            ))}
+          </>
+        )}
         {chips.map((chip) => (
           <div className="context-chip-wrap" key={chip.id}>
             <ContextChip

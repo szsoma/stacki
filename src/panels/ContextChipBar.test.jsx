@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ContextChipBar from './ContextChipBar.jsx';
 
@@ -26,7 +26,7 @@ describe('ContextChipBar', () => {
     render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
     fireEvent.click(screen.getByText('+ Add context'));
     expect(screen.queryByText('Current file')).not.toBeInTheDocument();
-    expect(screen.getByText('Selected files')).toBeInTheDocument();
+    expect(within(document.querySelector('.context-picker')).getByText('Selected files')).toBeInTheDocument();
   });
 
   it('adds the current file as a chip and includes it in the composed prompt', async () => {
@@ -37,7 +37,7 @@ describe('ContextChipBar', () => {
       />,
     );
     fireEvent.click(screen.getByText('+ Add context'));
-    fireEvent.click(screen.getByText('Current file'));
+    fireEvent.click(within(document.querySelector('.context-picker')).getByText('Current file'));
     await waitFor(() => expect(screen.getByText('Current file')).toBeInTheDocument());
 
     fireEvent.change(screen.getByPlaceholderText('Ask Codex to…'), { target: { value: 'Fix the spacing.' } });
@@ -55,7 +55,7 @@ describe('ContextChipBar', () => {
   it('adds selected files through the file picker', async () => {
     render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
     fireEvent.click(screen.getByText('+ Add context'));
-    fireEvent.click(screen.getByText('Selected files'));
+    fireEvent.click(within(document.querySelector('.context-picker')).getByText('Selected files'));
     await waitFor(() => expect(screen.getByText('src/pages/index.astro')).toBeInTheDocument());
     fireEvent.click(screen.getByLabelText('src/pages/index.astro'));
     fireEvent.click(screen.getByRole('button', { name: 'Add 1 file' }));
@@ -107,9 +107,9 @@ describe('ContextChipBar', () => {
         }}
       />,
     );
-    expect(screen.getByText('Selected element')).toBeInTheDocument();
-    expect(screen.getByText('Current page')).toBeInTheDocument();
-    expect(screen.getByText('Current component')).toBeInTheDocument();
+    expect(within(document.querySelector('.context-picker')).getByText('Selected element')).toBeInTheDocument();
+    expect(within(document.querySelector('.context-picker')).getByText('Current page')).toBeInTheDocument();
+    expect(within(document.querySelector('.context-picker')).getByText('Current component')).toBeInTheDocument();
   });
 
   it('shows a markdown preview in the details popover for a stale chip, not just a ready one', async () => {
@@ -120,7 +120,7 @@ describe('ContextChipBar', () => {
       />,
     );
     fireEvent.click(screen.getByText('+ Add context'));
-    fireEvent.click(screen.getByText('Current file'));
+    fireEvent.click(within(document.querySelector('.context-picker')).getByText('Current file'));
     await waitFor(() => expect(screen.getByText('Current file')).toBeInTheDocument());
 
     // Change the file's content — the chip's stale key (a hash of path +
@@ -150,7 +150,7 @@ describe('ContextChipBar', () => {
       />,
     );
     fireEvent.click(screen.getByText('+ Add context'));
-    fireEvent.click(screen.getByText('Selected element'));
+    fireEvent.click(within(document.querySelector('.context-picker')).getByText('Selected element'));
     await waitFor(() => expect(screen.getByText('Selected element')).toBeInTheDocument());
 
     fireEvent.change(screen.getByPlaceholderText('Ask Codex to…'), { target: { value: 'Fix this.' } });
@@ -167,13 +167,13 @@ describe('ContextChipBar', () => {
     expect(screen.queryByText('Console errors')).not.toBeInTheDocument();
 
     rerender(<ContextChipBar currentFile={null} projectPath="/projects/site" devLog="Error: build failed" />);
-    expect(screen.getByText('Console errors')).toBeInTheDocument();
+    expect(within(document.querySelector('.context-picker')).getByText('Console errors')).toBeInTheDocument();
   });
 
   it('offers Git diff whenever a project is open', () => {
     render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
     fireEvent.click(screen.getByText('+ Add context'));
-    expect(screen.getByText('Git diff')).toBeInTheDocument();
+    expect(within(document.querySelector('.context-picker')).getByText('Git diff')).toBeInTheDocument();
   });
 
   it('shows a context-size indicator only once a chip is attached, reflecting the composed size', async () => {
@@ -187,7 +187,7 @@ describe('ContextChipBar', () => {
     expect(screen.queryByText(/Context: ~/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('+ Add context'));
-    fireEvent.click(screen.getByText('Current file'));
+    fireEvent.click(within(document.querySelector('.context-picker')).getByText('Current file'));
     await waitFor(() => expect(screen.getByText('Current file')).toBeInTheDocument());
 
     const indicator = await screen.findByText(/Context: ~/);
@@ -207,7 +207,7 @@ describe('ContextChipBar', () => {
 
     render(<ContextChipBar currentFile={null} projectPath="/projects/site" />);
     fireEvent.click(screen.getByText('+ Add context'));
-    fireEvent.click(screen.getByText('Git diff'));
+    fireEvent.click(within(document.querySelector('.context-picker')).getByText('Git diff'));
     await waitFor(() => expect(screen.getByText('Git diff')).toBeInTheDocument());
 
     fireEvent.change(screen.getByPlaceholderText('Ask Codex to…'), { target: { value: 'Continue this change.' } });
