@@ -104,6 +104,7 @@ export default function ContextChipBar({
           {pickerOpen && (
             <ContextPicker
               resolvers={availableResolvers}
+              prompt={prompt}
               onPickSimple={pickSimple}
               onPickFiles={pickFiles}
               onListFiles={appState.listProjectFiles}

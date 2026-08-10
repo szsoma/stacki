@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { rankResolvers } from '../context/suggestedContext.js';
 
-export default function ContextPicker({ resolvers, onPickSimple, onPickFiles, onListFiles, onClose }) {
+export default function ContextPicker({ resolvers, prompt, onPickSimple, onPickFiles, onListFiles, onClose }) {
   const [view, setView] = useState('menu');
   const [allFiles, setAllFiles] = useState([]);
   const [query, setQuery] = useState('');
@@ -32,18 +33,36 @@ export default function ContextPicker({ resolvers, onPickSimple, onPickFiles, on
 
   const filtered = allFiles.filter((path) => path.toLowerCase().includes(query.toLowerCase()));
 
+  const ranked = rankResolvers(resolvers, {}, prompt || '');
+
+  const sections = [];
+  let currentSection = null;
+  for (const entry of ranked) {
+    if (entry.section !== currentSection) {
+      currentSection = entry.section;
+      sections.push({ section: currentSection, resolvers: [] });
+    }
+    sections[sections.length - 1].resolvers.push(entry.resolver);
+  }
+
   return (
     <div className="dropdown context-picker" ref={wrapRef}>
       {view === 'menu' ? (
         <>
-          <h3>Add context</h3>
-          {resolvers.map((resolver) => (
-            <div
-              key={resolver.type}
-              className="list-item"
-              onClick={() => (resolver.type === 'selected-files' ? openFiles() : onPickSimple(resolver.type))}
-            >
-              {resolver.label}
+          {sections.map(({ section, resolvers: groupResolvers }) => (
+            <div key={section} className="context-picker-section">
+              <div className="context-picker-section-title">
+                {section === 'suggested' ? 'Suggested' : section === 'project' ? 'Project' : 'Visual'}
+              </div>
+              {groupResolvers.map((resolver) => (
+                <div
+                  key={resolver.type}
+                  className="list-item"
+                  onClick={() => (resolver.type === 'selected-files' ? openFiles() : onPickSimple(resolver.type))}
+                >
+                  {resolver.label}
+                </div>
+              ))}
             </div>
           ))}
         </>
