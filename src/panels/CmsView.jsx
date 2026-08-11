@@ -771,6 +771,7 @@ function FieldSchema({ items, declared, path, ...ops }) {
   const dragFrom = useRef(null);
   // A nested level's fields must not answer a drag from the level above it.
   const dragType = `avb/cms-field-${path.join('.') || 'root'}`;
+  const [descFocus, setDescFocus] = useState(null);
 
   const drop = (source, target) => {
     if (!source || !target || source === target) return;
@@ -788,6 +789,7 @@ function FieldSchema({ items, declared, path, ...ops }) {
         const open = expanded.has(field.key);
         const info = typeInfo(field.type === 'empty' ? 'text' : field.type);
         const Icon = info.Icon;
+        const dotted = [...path, field.key].join('.');
         return (
           <div key={field.key} className="cms-schema-group">
             <div
@@ -840,31 +842,62 @@ function FieldSchema({ items, declared, path, ...ops }) {
               ) : (
                 <span className="cms-schema-expand" />
               )}
-              <input
-                key={field.key}
-                className="cms-schema-name"
-                defaultValue={field.label}
-                spellCheck={false}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur();
-                  if (e.key === 'Escape') {
-                    e.currentTarget.value = field.label;
-                    e.currentTarget.blur();
-                  }
-                }}
-                onBlur={(e) => {
-                  const next = keyFor(e.target.value);
-                  if (!next || !ops.onRenameField(path, field.key, next)) {
-                    e.target.value = field.label;
-                  }
-                }}
-              />
-              <span className="cms-schema-type" title="A field's type is set when it's created">
-                <Icon size={13} />
-                {info.label}
-                {field.refCollection &&
-                  ` → ${ops.collections?.find((c) => c.rel === field.refCollection)?.label || field.refCollection}`}
-              </span>
+              <div className="cms-schema-field-info">
+                <div className="cms-schema-field-row">
+                  <input
+                    key={field.key}
+                    className="cms-schema-name"
+                    defaultValue={field.label}
+                    spellCheck={false}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur();
+                      if (e.key === 'Escape') {
+                        e.currentTarget.value = field.label;
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const next = keyFor(e.target.value);
+                      if (!next || !ops.onRenameField(path, field.key, next)) {
+                        e.target.value = field.label;
+                      }
+                    }}
+                  />
+                  <span className="cms-schema-type" title="A field's type is set when it's created">
+                    <Icon size={13} />
+                    {info.label}
+                    {field.refCollection &&
+                      ` → ${ops.collections?.find((c) => c.rel === field.refCollection)?.label || field.refCollection}`}
+                  </span>
+                  <label className="cms-schema-required" title="Warn when empty on save">
+                    <input
+                      type="checkbox"
+                      checked={field.required || false}
+                      onChange={() => ops.onToggleRequired(path, field.key, !field.required)}
+                    />
+                    Required
+                  </label>
+                </div>
+                {field.description || descFocus === dotted ? (
+                  <div className="cms-schema-description">
+                    <input
+                      type="text"
+                      value={field.description || ''}
+                      placeholder="Help text shown when editing"
+                      onFocus={() => setDescFocus(dotted)}
+                      onBlur={() => { if (!field.description) setDescFocus(null); }}
+                      onChange={(e) => ops.onSetDescription(path, field.key, e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    className="ghost cms-schema-add-desc"
+                    onClick={() => setDescFocus(dotted)}
+                  >
+                    + Add description
+                  </button>
+                )}
+              </div>
               <button
                 className="ghost danger"
                 title="Delete field"

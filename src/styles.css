@@ -3046,6 +3046,57 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
   border-left: 1px solid var(--border);
 }
 
+.cms-schema-field-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cms-schema-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cms-schema-required {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted, #999);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  margin-left: 8px;
+}
+.cms-schema-required input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--accent, #4582e6);
+}
+.cms-schema-description {
+  padding-left: 18px;
+  margin-top: 4px;
+}
+.cms-schema-description input {
+  width: 100%;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border, #333);
+  background: var(--surface-input, #1a1a2e);
+  color: var(--text, #e0e0e0);
+}
+.cms-schema-description input::placeholder {
+  color: var(--text-muted, #666);
+  font-style: italic;
+}
+.cms-schema-add-desc {
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-left: 18px;
+  margin-top: 4px;
+  display: inline-block;
+}
+
 .cms-card.cms-danger { margin-top: 16px; }
 .cms-card.cms-danger .ghost.danger { color: var(--red); border: 1px solid rgba(255, 69, 58, 0.4); }
 .cms-card.cms-danger .ghost.danger:hover { background: rgba(255, 69, 58, 0.14); }
