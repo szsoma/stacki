@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(npm --version)",
-      "Bash(git --version)"
+      "Bash(git --version)",
+      "Bash(rtk ls *)",
+      "Bash(rtk read *)"
     ]
+  },
+  "worktree": {
+    "baseRef": "head"
   }
 }
