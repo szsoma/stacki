@@ -384,6 +384,7 @@ export default function CmsView({
           onRenameField={renameFieldAt}
           onRemoveField={removeFieldAt}
           onReorderFields={reorderFieldsAt}
+          onJumpToItem={onJumpToItem}
           onDone={onCloseSettings}
         />
       </div>
@@ -603,9 +604,11 @@ function CmsSettings({
   onRenameField,
   onRemoveField,
   onReorderFields,
+  onJumpToItem,
   onDone,
 }) {
   const [collections, setCollections] = useState([]);
+  const [deleteGuard, setDeleteGuard] = useState(null);
   useEffect(() => {
     let cancelled = false;
     window.avb.listCms(project.path).then(({ files }) => {
@@ -658,11 +661,43 @@ function CmsSettings({
             Moves src/{collection.rel} to the Trash. Pages that import it keep working — they
             switch to an empty list.
           </p>
-          <button className="ghost danger" onClick={() => deleteCollection(collection, project, showToast, onDeleted)}>
+          <button
+            className="ghost danger"
+            onClick={async () => {
+              const targetIds = items.filter(isPlainObject).map((it) => it._id).filter(Boolean);
+              const { hits, files } = targetIds.length
+                ? await loadDeleteGuard(project.path, collection.rel, targetIds)
+                : { hits: [], files: [] };
+              if (hits.length) {
+                setDeleteGuard({ hits, files });
+                return;
+              }
+              deleteCollection(collection, project, showToast, onDeleted);
+            }}
+          >
             <TrashIcon size={12} /> Delete {collection.label}
           </button>
         </div>
       </div>
+
+      {deleteGuard && (
+        <CmsDeleteGuard
+          title="Items in this collection are referenced elsewhere"
+          message="Resolve every reference below before deleting the collection — repoint it by hand, or remove the reference on the spot."
+          hits={deleteGuard.hits}
+          files={deleteGuard.files}
+          projectPath={project.path}
+          onShowInstance={(hit) => {
+            setDeleteGuard(null);
+            onJumpToItem?.(hit.collectionRel, hit.itemId);
+          }}
+          onConfirm={() => {
+            setDeleteGuard(null);
+            deleteCollection(collection, project, showToast, onDeleted);
+          }}
+          onCancel={() => setDeleteGuard(null)}
+        />
+      )}
     </div>
   );
 }

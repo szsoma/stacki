@@ -236,3 +236,30 @@ describe('jumping to a referencing item', () => {
     expect(onJumpToItem).toHaveBeenCalledWith('data/posts.json', 'p1');
   });
 });
+
+describe('deleting a collection whose items are referenced elsewhere', () => {
+  it('blocks the delete until the reference is resolved', async () => {
+    mockAvb({
+      files: {
+        'data/authors.json': [{ _id: 'a1', name: 'Ada' }],
+        'data/posts.json': [{ title: 'Hello', author: 'a1' }],
+      },
+      meta: { 'data/posts.json': { author: { type: 'reference', collection: 'data/authors.json' } } },
+    });
+    render(<CmsView project={project} rel="data/authors.json" settings showToast={vi.fn()} />);
+
+    fireEvent.click(await screen.findByText('Delete Authors'));
+    expect(await screen.findByText('Items in this collection are referenced elsewhere')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+  });
+
+  it('falls back to the plain confirm when nothing references it', async () => {
+    mockAvb({ files: { 'data/authors.json': [{ name: 'Ada' }] } });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(
+      <CmsView project={project} rel="data/authors.json" settings showToast={vi.fn()} onDeleted={vi.fn()} />
+    );
+    fireEvent.click(await screen.findByText('Delete Authors'));
+    await waitFor(() => expect(window.avb.deleteCms).toHaveBeenCalled());
+  });
+});
