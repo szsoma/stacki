@@ -85,6 +85,12 @@ import {
 import type { BreakpointId, ElementSnapshot, NativeModel, ParsedDeclaration, ParsedRule, Specificity } from './lib/types'
 import './embed-editor.css'
 
+import { fullValue, parseImportant, headerLabel, standaloneNativeClass, normalizeSelector, computePlaceholders } from './embedHelpers'
+import type { Placeholder } from './embedHelpers'
+import { PencilIcon, TrashIcon, EmbedIcon, ComponentIcon, SpinnerIcon, CheckIcon, UnsavedIcon, SaveIndicator, TabletBreakpointIcon, MobileLandscapeBreakpointIcon, MobileBreakpointIcon, DesktopBreakpointIcon, breakpointIcon } from './EditorIcons'
+import { LAYOUT_CONTROL_PROPS, EMBED_ONLY_PROPS, EFFECTS_CONTROL_PROPS, TYPOGRAPHY_CONTROL_PROPS, ALIGN_PROPS, GRID_CONTROL_PROPS } from './propertySets'
+import { SectionBlock } from './SectionBlock'
+
 type ScanState = {
   rootSnapshot: ElementSnapshot | undefined
   model: RuleModel
@@ -106,217 +112,7 @@ type Phase = 'idle' | 'scanning' | 'ready' | 'no-selection' | 'unsupported'
 const EMPTY_RESOLVED: ResolvedStyle = { props: new Map(), selectedRule: null, contexts: [], states: STATES }
 const EMPTY_RULE_MODEL: RuleModel = { base: [], conditional: [], matchedRuleCount: 0 }
 
-// ─────────────────────────── Value helpers ───────────────────────────
 
-function fullValue(decl: ParsedDeclaration): string {
-  return decl.important ? `${decl.value} !important` : decl.value
-}
-
-function parseImportant(input: string): { value: string; important: boolean } {
-  const match = input.match(/!\s*important\s*$/i)
-  if (match) return { value: input.slice(0, match.index).trim(), important: true }
-  return { value: input.trim(), important: false }
-}
-
-function headerLabel(snapshot: ElementSnapshot | undefined): string {
-  if (!snapshot) return 'None'
-  const tag = snapshot.tag ?? snapshot.webflowType.toLowerCase()
-  const id = snapshot.id ? `#${snapshot.id}` : ''
-  // Show classes in their Webflow CSS form, de-duplicated (the snapshot keeps the raw
-  // display name too — e.g. `Div Block` alongside `div-block` — for matching).
-  const formatted = [...new Set(snapshot.classes.map(webflowClassToCss).filter(Boolean))]
-  const classes = formatted.length ? `.${formatted.slice(0, 5).join('.')}` : ''
-  return `${tag}${id}${classes}` || tag
-}
-
-// A selector Webflow can represent as one base class without an element carrying it.
-// Interaction states remain native-capable; complex selectors and other pseudos need
-// an embed because the Style API has no standalone selector object for them.
-function standaloneNativeClass(selector: string): string | null {
-  const match = selector.trim().match(/^\.([_a-z-][\w-]*)(?::(?:hover|focus|active))?$/i)
-  return match ? webflowClassToCss(match[1]) : null
-}
-
-// ─────────────────────────── Query scaffolds ───────────────────────────
-
-// An empty "add a rule here" card for the selected element inside an existing
-// conditional query (@media/@container/…) that doesn't target it yet.
-type Placeholder = {
-  key: string
-  atContext: string[]
-  selector: string
-  embedKey: string
-  atRuleNode: AtRule
-}
-
-function normalizeSelector(selector: string): string {
-  return selector.replace(/\s+/g, ' ').trim()
-}
-
-// For each conditional query in the given (writable, current-context) embeds,
-// offer a scaffold for the element's primary class and full combo chain —
-// skipping any the query already contains.
-function computePlaceholders(docs: EmbedDoc[], classList: string[]): Placeholder[] {
-  if (!classList.length) return []
-  const primary = `.${classList[0]}`
-  const full = `.${classList.join('.')}`
-  const candidates = full === primary ? [primary] : [primary, full]
-
-  const out: Placeholder[] = []
-  for (const doc of docs) {
-    doc.regions.forEach((region, regionIndex) => {
-      for (const block of listAtRuleBlocks(region)) {
-        const existing = new Set(block.selectors.map(normalizeSelector))
-        for (const selector of candidates) {
-          if (existing.has(normalizeSelector(selector))) continue
-          out.push({
-            key: `${doc.source.key}:${regionIndex}:${block.atContext.join('>')}:${selector}`,
-            atContext: block.atContext,
-            selector,
-            embedKey: doc.source.key,
-            atRuleNode: block.node,
-          })
-        }
-      }
-    })
-  }
-  return out
-}
-
-// ─────────────────────────── Icons ───────────────────────────
-
-function PencilIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" width="13" height="13">
-      <path d="M11.5 2.5l2 2L6 12l-2.5.5L4 10l7.5-7.5z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    </svg>
-  )
-}
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" width="13" height="13">
-      <path d="M3.5 4.5h9M6.5 4V2.8h3V4M5 4.5l.5 8h5l.5-8" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-function EmbedIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M7.73438 11.5H6.70996L8.26562 4.5H9.29004L7.73438 11.5Z" fill="currentColor" />
-      <path d="M6.35352 6.85352L5.20703 8L6.35352 9.14648L5.64648 9.85352L3.79297 8L5.64648 6.14648L6.35352 6.85352Z" fill="currentColor" />
-      <path d="M12.207 8L10.3535 9.85352L9.64648 9.14648L10.793 8L9.64648 6.85352L10.3535 6.14648L12.207 8Z" fill="currentColor" />
-      <path fillRule="evenodd" clipRule="evenodd" d="M13 2C13.5523 2 14 2.44772 14 3V13C14 13.5523 13.5523 14 13 14H3C2.44772 14 2 13.5523 2 13V3C2 2.44772 2.44772 2 3 2H13ZM3 13H13V3H3V13Z" fill="currentColor" />
-    </svg>
-  )
-}
-
-// Webflow's component glyph — labels a component subheader in the source dropdown.
-function ComponentIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path fillRule="evenodd" clipRule="evenodd" d="M8.47885 1.69144C8.18037 1.52863 7.81963 1.52863 7.52115 1.69144L2.52115 4.41871C2.19989 4.59395 2 4.93066 2 5.29661V10.703C2 11.0689 2.19989 11.4056 2.52115 11.5809L7.52115 14.3081C7.81963 14.471 8.18037 14.471 8.47885 14.3081L13.4789 11.5809C13.8001 11.4056 14 11.0689 14 10.703V5.29661C14 4.93066 13.8001 4.59395 13.4789 4.41871L8.47885 1.69144ZM3.54416 4.99979L8 2.56934L12.4558 4.99979L8 7.43025L3.54416 4.99979ZM3 5.84206L3 10.703L7.5 13.1575V8.29661L3 5.84206ZM8.5 13.1575L13 10.703V5.84206L8.5 8.29661V13.1575Z" fill="currentColor" />
-    </svg>
-  )
-}
-
-// Header save state: spinner while writing, check when everything is saved, an
-// error mark (with the reason on hover) if the last write failed, or an unsaved
-// dot (reason on hover) when edits are deferred until you exit the component.
-// Rendered into the tool header's accessory slot (replaces the "Pro" tag).
-function SpinnerIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
-      <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  )
-}
-function CheckIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M3.5 8.5 6.5 11.5 12.5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-function UnsavedIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="8" cy="8" r="3.5" fill="currentColor" />
-    </svg>
-  )
-}
-function SaveIndicator({ busy, error, pending }: { busy: boolean; error: string | null; pending: string | null }) {
-  const [target, setTarget] = useState<HTMLElement | null>(null)
-  // Re-acquire the slot every render (no dep array) so the indicator follows it if the
-  // selector row remounts; the functional update no-ops when it's unchanged, so there's
-  // no render loop. The slot sits next to the `div.test` label, right-aligned.
-  useEffect(() => {
-    const el = document.getElementById('embed-editor_save-slot')
-    setTarget((prev) => (prev === el ? prev : el))
-  })
-  if (!target) return null
-  // Native `title` tooltips are unreliable inside the Designer iframe, so we
-  // render our own hover/focus tooltip (styled to match the dark UI).
-  const state = busy
-    ? { cls: 'is-saving', tip: 'Saving…', icon: <SpinnerIcon /> }
-    : error
-      ? { cls: 'is-error', tip: error, icon: <span className="embed-editor_save-mark">!</span> }
-      : pending
-        ? { cls: 'is-unsaved', tip: pending, icon: <UnsavedIcon /> }
-        : { cls: 'is-saved', tip: 'All changes saved', icon: <CheckIcon /> }
-  const node = (
-    <span className={`embed-editor_save ${state.cls}`} tabIndex={0} aria-label={state.tip}>
-      {state.icon}
-      <span className="embed-editor_tip" role="tooltip">{state.tip}</span>
-    </span>
-  )
-  return createPortal(node, target)
-}
-
-
-// Webflow's native breakpoint glyphs (tablet / mobile-landscape / mobile),
-// shown beside the responsive contexts in the style-context dropdown.
-function TabletBreakpointIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M9.5 11H6.5V12H9.5V11Z" fill="currentColor" />
-      <path fillRule="evenodd" clipRule="evenodd" d="M3 3C3 2.44772 3.44772 2 4 2H12C12.5523 2 13 2.44772 13 3V13C13 13.5523 12.5523 14 12 14H4C3.44772 14 3 13.5523 3 13V3ZM4 3H12V13H4V3Z" fill="currentColor" />
-    </svg>
-  )
-}
-function MobileLandscapeBreakpointIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M12 9V7H11V9H12Z" fill="currentColor" />
-      <path fillRule="evenodd" clipRule="evenodd" d="M4 12C2.89543 12 2 11.1046 2 10L2 6C2 4.89543 2.89543 4 4 4L12 4C13.1046 4 14 4.89543 14 6V10C14 11.1046 13.1046 12 12 12H4ZM3 10L3 6C3 5.44772 3.44772 5 4 5L12 5C12.5523 5 13 5.44772 13 6V10C13 10.5523 12.5523 11 12 11L4 11C3.44772 11 3 10.5523 3 10Z" fill="currentColor" />
-    </svg>
-  )
-}
-function MobileBreakpointIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M7 12H9V11H7V12Z" fill="currentColor" />
-      <path fillRule="evenodd" clipRule="evenodd" d="M4 4C4 2.89543 4.89543 2 6 2H10C11.1046 2 12 2.89543 12 4V12C12 13.1046 11.1046 14 10 14H6C4.89543 14 4 13.1046 4 12V4ZM6 3H10C10.5523 3 11 3.44772 11 4V12C11 12.5523 10.5523 13 10 13H6C5.44772 13 5 12.5523 5 12V4C5 3.44772 5.44772 3 6 3Z" fill="currentColor" />
-    </svg>
-  )
-}
-function DesktopBreakpointIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M12 5.36602L10.1519 6.43301L9.65192 5.56699L11.5 4.5L9.65193 3.43301L10.1519 2.56699L12 3.63397V1.5H13V3.63397L14.8481 2.56699L15.3481 3.43301L13.5 4.5L15.3481 5.56699L14.8481 6.43301L13 5.36602V7.5H12V5.36602Z" fill="currentColor" />
-      <path d="M3 4H8V5H3V12H13V9H14V12H16V13H0V12H2V5C2 4.44772 2.44772 4 3 4Z" fill="currentColor" />
-    </svg>
-  )
-}
-function breakpointIcon(id: BreakpointId | null): ReactNode {
-  switch (id) {
-    case 'main': return <DesktopBreakpointIcon />
-    case 'medium': return <TabletBreakpointIcon />
-    case 'small': return <MobileLandscapeBreakpointIcon />
-    case 'tiny': return <MobileBreakpointIcon />
-    default: return undefined
-  }
-}
 
 // ─────────────────────────── Declaration row ───────────────────────────
 
@@ -674,39 +470,6 @@ function AddPropertyRow({ busy, onAdd }: { busy: boolean; onAdd: (prop: string, 
   )
 }
 
-// ─────────────────────────── Section block ───────────────────────────
-
-// A collapsible section header (Webflow's chevron + label) wrapping a group of
-// controls. Open by default; collapse state is local to the block.
-function SectionBlock({ label, headerAction, defaultOpen = true, children }: { label: string; headerAction?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen)
-  const toggle = () => setOpen((value) => !value)
-  return (
-    <div className={`embed-editor_section-block ${open ? '' : 'is-collapsed'}`}>
-      {/* A row (not one big button) so an optional action can sit next to the chevron
-          without nesting a button inside a button. */}
-      <div className="embed-editor_section-header">
-        <button type="button" className="embed-editor_section-toggle" aria-expanded={open} onClick={toggle}>
-          <span className="embed-editor_section-title">{label}</span>
-        </button>
-        {headerAction}
-        <button
-          type="button"
-          className="embed-editor_section-chevron-btn"
-          aria-expanded={open}
-          aria-label={`${open ? 'Collapse' : 'Expand'} ${label}`}
-          onClick={toggle}
-        >
-          <svg className="embed-editor_section-chevron" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M4.2 6.2 8 10l3.8-3.8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      </div>
-      {open ? <div className="embed-editor_section-body">{children}</div> : null}
-    </div>
-  )
-}
-
 // ─────────────────────────── Provenance popover ───────────────────────────
 
 // Lists every selector that sets an "orange" property (applied through a selector
@@ -1016,47 +779,6 @@ function currentFlexFlow(read: (prop: string) => ResolvedProp | undefined): stri
   return wrap === 'nowrap' ? direction : `${direction} ${wrap}`
 }
 
-// Layout props owned by dedicated controls (Display + Direction + Gap) — kept out of the
-// generic property-row list so they aren't shown twice. Gap covers all three spellings:
-// the modern longhands, the legacy `grid-*` aliases, and the shorthand — otherwise a rule
-// using `row-gap` got a second, generic row for it beside the Gap control.
-const LAYOUT_CONTROL_PROPS = new Set([
-  'display', 'vertical-align', 'flex-flow', 'flex-direction', 'flex-wrap',
-  'gap', 'row-gap', 'column-gap', 'grid-gap', 'grid-row-gap', 'grid-column-gap',
-])
-
-// Properties that can only apply as raw CSS — Webflow exposes no Designer API to
-// populate its native Transitions UI, so `transition` (and its longhands) always
-// write to the embed (custom code) rather than the native class.
-const EMBED_ONLY_PROPS = new Set(['transition', 'transition-property', 'transition-duration', 'transition-timing-function', 'transition-delay'])
-// Effects props owned by dedicated controls in EffectsSection — kept out of the
-// generic fall-through rows (like TYPOGRAPHY_CONTROL_PROPS).
-const EFFECTS_CONTROL_PROPS = new Set([
-  'mix-blend-mode', 'opacity', 'outline-style', 'outline-width', 'outline-offset', 'outline-color', 'box-shadow',
-  'transform', 'filter', 'backdrop-filter', 'clip-path', '-webkit-clip-path', 'cursor', 'pointer-events',
-  // The Transitions layered editor owns the shorthand + all its longhands.
-  'transition', 'transition-property', 'transition-duration', 'transition-timing-function', 'transition-delay', 'transition-behavior',
-])
-
-// Typography props owned by dedicated controls in TypographySection — kept out of the
-// generic row list. Anything else in the section (text-shadow, -webkit-text-stroke,
-// …) still renders as a generic row below.
-const TYPOGRAPHY_CONTROL_PROPS = new Set([
-  'font-family', 'font-weight', 'font-size', 'line-height', 'color',
-  'text-align', 'letter-spacing', 'text-indent', 'column-count',
-  'font-style', 'text-transform', 'direction',
-  // The Decor bar + its "…" popover (line via the shorthand; thickness / skip-ink longhands).
-  'text-decoration', 'text-decoration-line', 'text-decoration-style', 'text-decoration-color',
-  'text-decoration-thickness', 'text-decoration-skip-ink',
-  // The Breaking row (Word / Line dropdowns) + the Wrap row.
-  'word-break', 'white-space', 'overflow-wrap',
-  // The multi-column "…" popover (Gap / divider rule / span).
-  'column-gap', 'column-rule-style', 'column-rule-width', 'column-rule-color', 'column-span',
-  // The Truncate / Stroke / Text-shadows rows.
-  'text-overflow', '-webkit-text-stroke', '-webkit-text-stroke-width', '-webkit-text-stroke-color', 'text-shadow',
-])
-
-
 // The flex Direction control — only rendered when `display` is flex. Writes the
 // `flex-direction` + `flex-wrap` longhands; the label clears them (and any legacy
 // `flex-flow`).
@@ -1095,19 +817,6 @@ function DirectionRow({ read, busy, setProp, clearProp, onProvenance, onSelectSe
     </div>
   )
 }
-
-// The flex Align control — only rendered when `display` is flex. Its X / Y dropdowns
-// write `justify-content` / `align-items` (mapped to the screen axis via the current
-// flex-direction); the combined "Align" label clears both.
-const ALIGN_PROPS = new Set(['justify-content', 'align-items'])
-// Grid props owned by the dedicated GridControls block (and the "Configure grid"
-// panel) — kept out of the generic fall-through rows when the element is a grid
-// container (they'd otherwise double up). grid-auto-columns/-rows live in Configure grid.
-const GRID_CONTROL_PROPS = new Set([
-  'grid-template-columns', 'grid-template-rows', 'grid-template-areas',
-  'grid-auto-flow', 'grid-auto-columns', 'grid-auto-rows',
-  'justify-items', 'align-items', 'justify-content', 'align-content',
-])
 
 function AlignRow({ read, busy, setProp, clearProp, liveSetProp, onProvenance, onSelectSelector }: {
   read: (prop: string) => ResolvedProp | undefined
