@@ -3062,7 +3062,7 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--text-muted, #999);
+  color: var(--text-faint);
   white-space: nowrap;
   cursor: default;
   user-select: none;
@@ -3070,7 +3070,7 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
 }
 .cms-schema-required input[type="checkbox"] {
   margin: 0;
-  accent-color: var(--accent, #4582e6);
+  accent-color: var(--accent);
 }
 .cms-schema-description {
   padding-left: 18px;
@@ -3081,12 +3081,12 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
   font-size: 12px;
   padding: 4px 8px;
   border-radius: 4px;
-  border: 1px solid var(--border, #333);
-  background: var(--surface-input, #1a1a2e);
-  color: var(--text, #e0e0e0);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
 }
 .cms-schema-description input::placeholder {
-  color: var(--text-muted, #666);
+  color: var(--text-faint);
   font-style: italic;
 }
 .cms-schema-add-desc {
