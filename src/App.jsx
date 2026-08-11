@@ -53,78 +53,15 @@ const DEFAULT_TEXT = {
   p: LOREM,
 };
 
-// ---------------------------------------------------------------------------
-// Tree helpers (model.nodes is a tree of {id, kind, name?, props?, children?})
-// ---------------------------------------------------------------------------
-
-function findNodeById(nodes, id) {
-  for (const node of nodes) {
-    if (node.id === id) return node;
-    if (Array.isArray(node.children)) {
-      const found = findNodeById(node.children, id);
-      if (found) return found;
-    }
-  }
-  return null;
-}
-
-// Returns {list, index} of the array containing the node.
-function findParentList(model, id) {
-  const search = (list) => {
-    const index = list.findIndex((n) => n.id === id);
-    if (index !== -1) return { list, index };
-    for (const node of list) {
-      if (Array.isArray(node.children)) {
-        const found = search(node.children);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-  return search(model.nodes);
-}
-
-function isDescendantOf(candidateParent, id) {
-  if (!Array.isArray(candidateParent.children)) return false;
-  return !!findNodeById(candidateParent.children, id) || candidateParent.id === id;
-}
-
-// Position (index trail) of a node in the tree, for re-selecting the
-// equivalent node after an external reload regenerates ids.
-function pathOfNode(nodes, id, trail = []) {
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i];
-    if (n.id === id) return [...trail, i];
-    if (Array.isArray(n.children)) {
-      const p = pathOfNode(n.children, id, [...trail, i]);
-      if (p) return p;
-    }
-  }
-  return null;
-}
-
-// Ancestor chain (root → … → node) for breadcrumbs.
-function ancestorChain(nodes, id, trail = []) {
-  for (const node of nodes) {
-    if (node.id === id) return [...trail, node];
-    if (Array.isArray(node.children)) {
-      const r = ancestorChain(node.children, id, [...trail, node]);
-      if (r) return r;
-    }
-  }
-  return null;
-}
-
-function nodeAtPath(nodes, trail) {
-  let list = nodes;
-  let node = null;
-  for (const i of trail) {
-    node = list?.[i];
-    if (!node) return null;
-    list = Array.isArray(node.children) ? node.children : [];
-  }
-  return node;
-}
+import {
+  ancestorChain,
+  findNodeById,
+  findParentList,
+  findParentNode,
+  isDescendantOf,
+  nodeAtPath,
+  pathOfNode,
+} from './model/nodes.ts';
 
 // ---------------------------------------------------------------------------
 // Renaming a loop variable
@@ -1921,17 +1858,6 @@ export default function App() {
           : schemaFor(insertables.find((c) => c.name === selectedNode.name))
       : [];
 
-  // Slots offered by the selected node's parent (the component or layout the
-  // node is slotted into) — turns the `slot` attribute into a dropdown.
-  const findParentNode = (nodes, id) => {
-    for (const n of nodes) {
-      if (!Array.isArray(n.children)) continue;
-      if (n.children.some((c) => c.id === id)) return n;
-      const found = findParentNode(n.children, id);
-      if (found) return found;
-    }
-    return null;
-  };
   let slotOptions = null;
   if (model && selectedNode && selectedId !== 'layout') {
     const parent = findParentNode(model.nodes, selectedId);
