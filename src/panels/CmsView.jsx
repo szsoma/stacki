@@ -49,6 +49,7 @@ import {
 import { ReferenceControl, MultiReferenceControl } from './CmsReferenceField.jsx';
 import { findIncomingReferences } from '../cmsReferences.js';
 import CmsDeleteGuard from './CmsDeleteGuard.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 
 const SAVE_DELAY = 400;
 
@@ -107,6 +108,7 @@ export default function CmsView({
   onJumpHandled,
   onJumpToItem,
 }) {
+  const t = useT();
   const [collection, setCollection] = useState(null);
   const [items, setItems] = useState([]);
   const [sel, setSel] = useState(0);
@@ -289,7 +291,7 @@ export default function CmsView({
       ? await loadDeleteGuard(project.path, rel, [targetId])
       : { hits: [], files: [] };
     if (!hits.length) {
-      if (!window.confirm(`Delete “${titleOf(item, sel)}”?`)) return;
+      if (!window.confirm(t('cmsView.deleteItemConfirm', { title: titleOf(item, sel) }))) return;
       doRemoveItem();
       return;
     }
@@ -337,7 +339,7 @@ export default function CmsView({
   const renameFieldAt = (path, from, to) => {
     if (!to || to === from) return false;
     if (fieldsAt(items, path).some((f) => f.key === to)) {
-      showToast(`This level already has a “${labelize(to)}” field.`, 'error');
+      showToast(t('cmsView.fieldExists', { name: labelize(to) }), 'error');
       return false;
     }
     const fromPath = [...path, from].join('.');
@@ -397,7 +399,7 @@ export default function CmsView({
         <div className="cms-items-head">
           <span className="cms-items-title">{collection.label}</span>
           {!single && (
-            <button className="ghost" title="New item" onClick={addItem}>
+            <button className="ghost" title={t('cmsView.newItem')} onClick={addItem}>
               <PlusIcon size={14} />
             </button>
           )}
@@ -407,7 +409,7 @@ export default function CmsView({
           <div className="cms-search">
             <input
               value={query}
-              placeholder="Search items"
+              placeholder={t('cmsView.searchItems')}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
@@ -478,38 +480,38 @@ export default function CmsView({
 
           {items.length === 0 && (
             <div className="props-empty">
-              Nothing here yet.
+              {t('cmsView.nothingHere')}
               <div style={{ marginTop: 10 }}>
                 <button className="primary" onClick={addItem}>
-                  Add the first item
+                  {t('cmsView.addFirstItem')}
                 </button>
               </div>
             </div>
           )}
           {items.length > 0 && filtered.length === 0 && (
-            <div className="props-empty">No items match “{query}”.</div>
+            <div className="props-empty">{t('cmsView.noItemsMatch', { query })}</div>
           )}
         </div>
       </div>
 
       <div className="cms-detail">
         <div className="cms-detail-head">
-          <button className="ghost cms-back" title="Close the CMS" onClick={onClose}>
+          <button className="ghost cms-back" title={t('cmsView.closeCms')} onClick={onClose}>
             <CloseIcon size={13} />
           </button>
           <span className="cms-detail-title">
             {item ? titleOf(item, sel) : collection.label}
           </span>
           <span className={`cms-saved ${saved ? 'on' : ''}`}>
-            <CheckIcon size={11} /> Saved
+            <CheckIcon size={11} /> {t('cmsView.saved')}
           </span>
           <span className="cms-detail-path">src/{collection.rel}</span>
           {item && !single && (
             <>
-              <button className="ghost" title="Duplicate item" onClick={duplicate}>
+              <button className="ghost" title={t('cmsView.duplicateItem')} onClick={duplicate}>
                 <CopyIcon size={13} />
               </button>
-              <button className="ghost danger" title="Delete item" onClick={removeItem}>
+              <button className="ghost danger" title={t('cmsView.deleteItem')} onClick={removeItem}>
                 <TrashIcon size={13} />
               </button>
             </>
@@ -521,7 +523,7 @@ export default function CmsView({
 
           {item !== undefined && !isPlainObject(item) && (
             <div className="cms-card">
-              <h3>{single ? collection.label : 'Basic info'}</h3>
+              <h3>{single ? collection.label : t('cmsView.basicInfo')}</h3>
               <FieldRow
                 label="Value"
                 type={inferType(item)}
@@ -534,7 +536,7 @@ export default function CmsView({
 
           {item && isPlainObject(item) && (
             <div className="cms-card">
-              <h3>{single ? collection.label : 'Basic info'}</h3>
+              <h3>{single ? collection.label : t('cmsView.basicInfo')}</h3>
               {fields.map((field) => (
                 <FieldRow
                   key={field.key}
@@ -555,22 +557,22 @@ export default function CmsView({
               ))}
               {fields.length === 0 && (
                 <div className="props-empty">
-                  This collection has no fields yet — add them in its settings.
+                  {t('cmsView.noFieldsInCollection')}
                 </div>
               )}
             </div>
           )}
 
           {!item && !collection.error && (
-            <div className="props-empty">Select an item to edit it.</div>
+            <div className="props-empty">{t('cmsView.selectItem')}</div>
           )}
         </div>
       </div>
 
       {deleteGuard && (
         <CmsDeleteGuard
-          title="This item is referenced elsewhere"
-          message="Resolve every reference below before deleting it — repoint it by hand, or remove the reference on the spot."
+          title={t('cmsView.deleteGuardItemTitle')}
+          message={t('cmsView.deleteGuardItemMsg')}
           hits={deleteGuard.hits}
           files={deleteGuard.files}
           projectPath={project.path}
@@ -607,6 +609,7 @@ function CmsSettings({
   onJumpToItem,
   onDone,
 }) {
+  const t = useT();
   const [collections, setCollections] = useState([]);
   const [deleteGuard, setDeleteGuard] = useState(null);
   useEffect(() => {
@@ -622,26 +625,26 @@ function CmsSettings({
   return (
     <div className="cms-settings">
       <div className="cms-detail-head">
-        <button className="ghost cms-back" title="Back to items" onClick={onDone}>
+        <button className="ghost cms-back" title={t('cmsView.backToItems')} onClick={onDone}>
           <ChevronLeftIcon size={14} />
         </button>
-        <span className="cms-detail-title">{collection.label} Settings</span>
+        <span className="cms-detail-title">{t('cmsView.collectionSettings', { label: collection.label })}</span>
         <span className={`cms-saved ${saved ? 'on' : ''}`}>
-          <CheckIcon size={11} /> Saved
+          <CheckIcon size={11} /> {t('cmsView.saved')}
         </span>
         <span className="cms-detail-path">src/{collection.rel}</span>
         <button className="primary" onClick={onDone}>
-          Done
+          {t('common.done')}
         </button>
       </div>
 
       <div className="cms-detail-body">
         <div className="cms-card">
-          <h3>Collection fields</h3>
+          <h3>{t('cmsView.collectionFields')}</h3>
           <p className="cms-note">
             {collection.single
-              ? 'This file holds one set of fields.'
-              : `Shared by all ${items.length} ${items.length === 1 ? 'item' : 'items'}.`}
+              ? t('cmsView.oneSetsOfFields')
+              : t('cmsView.sharedByItems', { count: items.length, items: items.length === 1 ? 'item' : 'items' })}
           </p>
           <FieldSchema
             items={items}
@@ -656,10 +659,9 @@ function CmsSettings({
         </div>
 
         <div className="cms-card cms-danger">
-          <h3>Delete collection</h3>
+          <h3>{t('cmsView.deleteCollection')}</h3>
           <p className="cms-note">
-            Moves src/{collection.rel} to the Trash. Pages that import it keep working — they
-            switch to an empty list.
+            {t('cmsView.deleteCollectionDesc', { rel: collection.rel })}
           </p>
           <button
             className="ghost danger"
@@ -672,18 +674,18 @@ function CmsSettings({
                 setDeleteGuard({ hits, files });
                 return;
               }
-              deleteCollection(collection, project, showToast, onDeleted);
+              deleteCollection(t, collection, project, showToast, onDeleted);
             }}
           >
-            <TrashIcon size={12} /> Delete {collection.label}
+            <TrashIcon size={12} /> {t('cmsView.deleteCollectionButton', { label: collection.label })}
           </button>
         </div>
       </div>
 
       {deleteGuard && (
         <CmsDeleteGuard
-          title="Items in this collection are referenced elsewhere"
-          message="Resolve every reference below before deleting the collection — repoint it by hand, or remove the reference on the spot."
+          title={t('cmsView.deleteGuardCollTitle')}
+          message={t('cmsView.deleteGuardCollMsg')}
           hits={deleteGuard.hits}
           files={deleteGuard.files}
           projectPath={project.path}
@@ -693,7 +695,7 @@ function CmsSettings({
           }}
           onConfirm={() => {
             setDeleteGuard(null);
-            deleteCollection(collection, project, showToast, onDeleted);
+            deleteCollection(t, collection, project, showToast, onDeleted);
           }}
           onCancel={() => setDeleteGuard(null)}
         />
@@ -704,7 +706,7 @@ function CmsSettings({
 
 // Names the pages that import the collection before it goes, since they're
 // rewritten as part of the delete.
-async function deleteCollection(collection, project, showToast, onDeleted) {
+async function deleteCollection(t, collection, project, showToast, onDeleted) {
   const fail = (err) =>
     showToast(
       String(err?.message || err).replace(/^Error invoking remote method '[^']+':\s*(Error:\s*)?/, ''),
@@ -719,12 +721,13 @@ async function deleteCollection(collection, project, showToast, onDeleted) {
   }
   const where =
     used.length === 0
-      ? 'No page uses it.'
-      : `${used.length === 1 ? '1 page uses' : `${used.length} pages use`} it (${used
-          .slice(0, 3)
-          .join(', ')}${used.length > 3 ? `, +${used.length - 3} more` : ''}). ` +
-        'They will keep working, showing nothing, until you point them at other data.';
-  if (!window.confirm(`Delete the ${collection.label} collection?\n\n${where}`)) return;
+      ? t('cmsView.noPageUses')
+      : t('cmsView.pagesUseIt', {
+          count: used.length,
+          pages: used.length === 1 ? '1 page uses' : `${used.length} pages use`,
+          list: `${used.slice(0, 3).join(', ')}${used.length > 3 ? `, +${used.length - 3} more` : ''}`,
+        });
+  if (!window.confirm(t('cmsView.deleteCollConfirm', { label: collection.label, where }))) return;
   try {
     await window.avb.deleteCms({ projectPath: project.path, rel: collection.rel });
     onDeleted?.();
@@ -735,6 +738,7 @@ async function deleteCollection(collection, project, showToast, onDeleted) {
 
 // The fields defined at one level, with the nested levels folded underneath.
 function FieldSchema({ items, declared, path, ...ops }) {
+  const t = useT();
   const fields = withDeclaredTypes(fieldsAt(items, path), declared, path);
   const [expanded, setExpanded] = useState(() => new Set());
   const [dragKey, setDragKey] = useState(null);
@@ -797,7 +801,7 @@ function FieldSchema({ items, declared, path, ...ops }) {
               {nested ? (
                 <button
                   className="ghost cms-schema-expand"
-                  title={open ? 'Hide its fields' : 'Show its fields'}
+                  title={open ? t('cmsView.hideFields') : t('cmsView.showFields')}
                   onClick={() =>
                     setExpanded((prev) => {
                       const next = new Set(prev);
@@ -830,7 +834,7 @@ function FieldSchema({ items, declared, path, ...ops }) {
                   }
                 }}
               />
-              <span className="cms-schema-type" title="A field's type is set when it's created">
+              <span className="cms-schema-type" title={t('cmsView.fieldTypeInfo')}>
                 <Icon size={13} />
                 {info.label}
                 {field.refCollection &&
@@ -838,11 +842,11 @@ function FieldSchema({ items, declared, path, ...ops }) {
               </span>
               <button
                 className="ghost danger"
-                title="Delete field"
+                title={t('cmsView.deleteField')}
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Delete the “${field.label}” field? Its content is removed from every item.`
+                      t('cmsView.deleteConfirm', { label: field.label })
                     )
                   ) {
                     ops.onRemoveField(path, field.key);
@@ -867,7 +871,7 @@ function FieldSchema({ items, declared, path, ...ops }) {
         );
       })}
 
-      {fields.length === 0 && <div className="cms-empty-inline">No fields yet.</div>}
+      {fields.length === 0 && <div className="cms-empty-inline">{t('cmsView.noFields')}</div>}
 
       <AddFieldRow
         compact={path.length > 0}
@@ -992,6 +996,7 @@ function FieldRow({
 }
 
 function FieldControl({ type, value, onChange, projectPath, depth, refCollection, declared, path, resolveCollection }) {
+  const t = useT();
   if (type === 'boolean') {
     return (
       <button
@@ -1000,7 +1005,7 @@ function FieldControl({ type, value, onChange, projectPath, depth, refCollection
         onClick={() => onChange(!value)}
       >
         <span className="cms-toggle-knob" />
-        <span className="cms-toggle-label">{value ? 'On' : 'Off'}</span>
+        <span className="cms-toggle-label">{value ? t('common.on') : t('common.off')}</span>
       </button>
     );
   }
@@ -1134,6 +1139,7 @@ function FieldControl({ type, value, onChange, projectPath, depth, refCollection
 
 // Array of plain values — tags, bullet points, feature lines.
 function ListEditor({ value, onChange }) {
+  const t = useT();
   return (
     <div className="cms-list">
       {value.map((entry, i) => (
@@ -1148,7 +1154,7 @@ function ListEditor({ value, onChange }) {
           />
           <button
             className="ghost"
-            title="Remove"
+            title={t('cmsView.remove')}
             onClick={() => onChange(value.filter((_, j) => j !== i))}
           >
             <CloseIcon size={10} />
@@ -1156,7 +1162,7 @@ function ListEditor({ value, onChange }) {
         </div>
       ))}
       <button className="cms-add" onClick={() => onChange([...value, ''])}>
-        <PlusIcon size={11} /> Add
+        <PlusIcon size={11} /> {t('cmsView.add')}
       </button>
     </div>
   );
@@ -1164,6 +1170,7 @@ function ListEditor({ value, onChange }) {
 
 // A nested object: its keys become fields one level in.
 function GroupEditor({ value, onChange, projectPath, depth, declared, path, resolveCollection }) {
+  const t = useT();
   const fields = withDeclaredTypes(fieldsOf([value]), declared, path);
   return (
     <div className="cms-group-box">
@@ -1182,7 +1189,7 @@ function GroupEditor({ value, onChange, projectPath, depth, declared, path, reso
           onChange={(v) => onChange({ ...value, [field.key]: v })}
         />
       ))}
-      {fields.length === 0 && <div className="cms-empty-inline">Empty group.</div>}
+      {fields.length === 0 && <div className="cms-empty-inline">{t('cmsView.emptyGroup')}</div>}
     </div>
   );
 }
@@ -1191,6 +1198,7 @@ function GroupEditor({ value, onChange, projectPath, depth, declared, path, reso
 // entry is one row showing its name; the fields behind it open in a dialog,
 // so a long item doesn't push the rest of the form off the screen.
 function RepeaterEditor({ value, onChange, projectPath, depth, declared, path, resolveCollection }) {
+  const t = useT();
   const [openIndex, setOpenIndex] = useState(null);
   const [dragIndex, setDragIndex] = useState(null);
   const [dropIndex, setDropIndex] = useState(null);
@@ -1257,7 +1265,7 @@ function RepeaterEditor({ value, onChange, projectPath, depth, declared, path, r
           <span className="cms-repeat-title">{titleOf(entry, i)}</span>
           <button
             className="ghost"
-            title="Remove"
+            title={t('cmsView.remove')}
             onClick={(e) => {
               e.stopPropagation();
               removeAt(i);
@@ -1270,7 +1278,7 @@ function RepeaterEditor({ value, onChange, projectPath, depth, declared, path, r
       ))}
 
       <button className="cms-add" onClick={add}>
-        <PlusIcon size={11} /> Add item
+        <PlusIcon size={11} /> {t('cmsView.addItem')}
       </button>
 
       {openIndex != null && value[openIndex] !== undefined && (
@@ -1298,6 +1306,7 @@ function RepeaterEditor({ value, onChange, projectPath, depth, declared, path, r
 // One entry of a repeater, in a dialog. Edits apply as they're typed — the
 // buttons are for leaving and removing, not for committing.
 function NestedItemDialog({ entry, title, projectPath, depth, declared, path, resolveCollection, onChange, onDelete, onClose }) {
+  const t = useT();
   const overlayRef = useRef(null);
   const fields = withDeclaredTypes(fieldsOf([entry]), declared, path);
 
@@ -1324,7 +1333,7 @@ function NestedItemDialog({ entry, title, projectPath, depth, declared, path, re
       <div className="modal cms-modal">
         <div className="modal-header cms-modal-header">
           <span>{title}</span>
-          <button className="ghost" title="Close" onClick={onClose}>
+          <button className="ghost" title={t('common.close')} onClick={onClose}>
             <CloseIcon size={12} />
           </button>
         </div>
@@ -1346,16 +1355,16 @@ function NestedItemDialog({ entry, title, projectPath, depth, declared, path, re
           ))}
           {fields.length === 0 && (
             <div className="cms-empty-inline">
-              These items have no fields yet — add them in the collection's settings.
+              {t('cmsView.noFieldsInRepeater')}
             </div>
           )}
         </div>
         <div className="modal-footer cms-modal-footer">
           <button className="ghost danger" onClick={onDelete}>
-            <TrashIcon size={12} /> Delete
+            <TrashIcon size={12} /> {t('common.delete')}
           </button>
           <button className="primary" onClick={onClose}>
-            Done
+            {t('common.done')}
           </button>
         </div>
       </div>
@@ -1364,11 +1373,12 @@ function NestedItemDialog({ entry, title, projectPath, depth, declared, path, re
 }
 
 function AddFieldRow({ onAdd, compact, collections }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <>
       <button className={`cms-add ${compact ? 'compact' : ''}`} onClick={() => setOpen(true)}>
-        <PlusIcon size={11} /> Add field
+        <PlusIcon size={11} /> {t('cmsView.addField')}
       </button>
       {open && (
         <NewFieldDialog
@@ -1388,6 +1398,7 @@ function AddFieldRow({ onAdd, compact, collections }) {
 // changed afterwards — then name it. Reference/multi-reference types add a
 // step in between: which collection the field points at.
 function NewFieldDialog({ onAdd, onClose, collections = [] }) {
+  const t = useT();
   const [type, setType] = useState(null);
   const [targetCollection, setTargetCollection] = useState(null);
   const [name, setName] = useState('');
@@ -1431,18 +1442,18 @@ function NewFieldDialog({ onAdd, onClose, collections = [] }) {
       <div className="modal cms-modal cms-type-modal">
         <div className="modal-header cms-modal-header">
           {type && (
-            <button className="ghost" title="Back" onClick={back}>
+            <button className="ghost" title={t('common.back')} onClick={back}>
               <ChevronLeftIcon size={13} />
             </button>
           )}
           <span>
             {!type
-              ? 'Choose a field type'
+              ? t('cmsView.chooseFieldType')
               : needsCollection
-                ? `Link to which collection?`
-                : `New ${info.label} field`}
+                ? t('cmsView.linkToCollection')
+                : t('cmsView.newFieldType', { label: info.label })}
           </span>
-          <button className="ghost" title="Close" onClick={onClose}>
+          <button className="ghost" title={t('common.close')} onClick={onClose}>
             <CloseIcon size={12} />
           </button>
         </div>
@@ -1460,7 +1471,7 @@ function NewFieldDialog({ onAdd, onClose, collections = [] }) {
         ) : needsCollection ? (
           <div className="modal-body cms-ref-collection-list">
             {collections.length === 0 && (
-              <div className="cms-empty-inline">No other collections yet.</div>
+              <div className="cms-empty-inline">{t('cmsView.noOtherCollections')}</div>
             )}
             {collections.map((c) => (
               <button key={c.rel} className="cms-ref-option" onClick={() => setTargetCollection(c.rel)}>
@@ -1475,11 +1486,11 @@ function NewFieldDialog({ onAdd, onClose, collections = [] }) {
           <>
             <div className="modal-body">
               <div>
-                <label>Name</label>
+                <label>{t('cmsView.fieldName')}</label>
                 <input
                   autoFocus
                   value={name}
-                  placeholder={`e.g. ${info.label === 'Text' ? 'Subtitle' : info.label}`}
+                  placeholder={t('cmsView.fieldNamePlaceholder', { example: info.label === 'Text' ? 'Subtitle' : info.label })}
                   onChange={(e) => setName(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') submit();
@@ -1488,16 +1499,16 @@ function NewFieldDialog({ onAdd, onClose, collections = [] }) {
               </div>
               {keyFor(name) && (
                 <div className="cms-note" style={{ margin: 0 }}>
-                  Your code reads this as <code>{keyFor(name)}</code>.
+                  {t('cmsView.codeKeyHint', { key: keyFor(name) })}
                 </div>
               )}
             </div>
             <div className="modal-footer">
               <button className="ghost" onClick={onClose}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button className="primary" onClick={submit} disabled={!keyFor(name)}>
-                Add field
+                {t('cmsView.addField')}
               </button>
             </div>
           </>
