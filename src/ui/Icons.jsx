@@ -719,6 +719,23 @@ export const SearchIcon = (p) => (
   </I>
 );
 
+export const ReferenceIcon = (p) => (
+  <I {...p}>
+    <path d="M6.8 9.2 9.2 6.8" />
+    <path d="M7.6 4.4 9 3a2.3 2.3 0 0 1 3.3 3.3L11 7.6" />
+    <path d="M8.4 11.6 7 13a2.3 2.3 0 0 1-3.3-3.3L5 8.4" />
+  </I>
+);
+
+export const MultiReferenceIcon = (p) => (
+  <I {...p}>
+    <path d="M6.8 9.2 9.2 6.8" />
+    <path d="M7.6 4.4 9 3a2.3 2.3 0 0 1 3.3 3.3L11 7.6" />
+    <path d="M8.4 11.6 7 13a2.3 2.3 0 0 1-3.3-3.3L5 8.4" />
+    <circle cx="13" cy="3" r="1.6" fill="currentColor" stroke="none" />
+  </I>
+);
+
 export function elementIcon(tag, size = 12, className) {
   const Icon = TAG_ICONS[String(tag).toLowerCase()] || CustomElementIcon;
   return <Icon size={size} className={className} />;

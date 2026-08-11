@@ -21,6 +21,8 @@ import {
   ElementListDefaultIcon,
   BracesIcon,
   RepeatIcon,
+  ReferenceIcon,
+  MultiReferenceIcon,
 } from '../ui/Icons.jsx';
 import AutoTextarea from '../ui/AutoTextarea.jsx';
 import AssetField from '../ui/AssetField.jsx';
@@ -63,6 +65,8 @@ const FIELD_TYPES = [
   { value: 'list', label: 'List of text', Icon: ElementListDefaultIcon, hint: 'Tags, bullets' },
   { value: 'object', label: 'Group', Icon: BracesIcon, hint: 'Fields kept together' },
   { value: 'objects', label: 'Repeating items', Icon: RepeatIcon, hint: 'A list of entries' },
+  { value: 'reference', label: 'Reference', Icon: ReferenceIcon, hint: 'Link to one item' },
+  { value: 'multiReference', label: 'Multi-reference', Icon: MultiReferenceIcon, hint: 'Link to many items' },
 ];
 
 const typeInfo = (type) =>
@@ -260,10 +264,11 @@ export default function CmsView({
       });
   };
 
-  const addFieldAt = (path, key, type) => {
+  const addFieldAt = (path, key, type, targetCollection) => {
     if (!key) return;
     if (fieldsAt(items, path).some((f) => f.key === key)) return;
-    saveDeclared({ ...declared, [[...path, key].join('.')]: type });
+    const config = type === 'reference' || type === 'multiReference' ? { type, collection: targetCollection } : type;
+    saveDeclared({ ...declared, [[...path, key].join('.')]: config });
     commit(applyToItems(items, path, putKey(key, type)));
   };
 
@@ -517,6 +522,17 @@ function CmsSettings({
   onReorderFields,
   onDone,
 }) {
+  const [collections, setCollections] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    window.avb.listCms(project.path).then(({ files }) => {
+      if (!cancelled) setCollections((files || []).map(collectionOf));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.path]);
+
   return (
     <div className="cms-settings">
       <div className="cms-detail-head">
@@ -545,6 +561,7 @@ function CmsSettings({
             items={items}
             declared={declared}
             path={[]}
+            collections={collections}
             onAddField={onAddField}
             onRenameField={onRenameField}
             onRemoveField={onRemoveField}
@@ -698,6 +715,8 @@ function FieldSchema({ items, declared, path, ...ops }) {
               <span className="cms-schema-type" title="A field's type is set when it's created">
                 <Icon size={13} />
                 {info.label}
+                {field.refCollection &&
+                  ` → ${ops.collections?.find((c) => c.rel === field.refCollection)?.label || field.refCollection}`}
               </span>
               <button
                 className="ghost danger"
@@ -732,7 +751,11 @@ function FieldSchema({ items, declared, path, ...ops }) {
 
       {fields.length === 0 && <div className="cms-empty-inline">No fields yet.</div>}
 
-      <AddFieldRow compact={path.length > 0} onAdd={(key, type) => ops.onAddField(path, key, type)} />
+      <AddFieldRow
+        compact={path.length > 0}
+        collections={ops.collections}
+        onAdd={(key, type, targetCollection) => ops.onAddField(path, key, type, targetCollection)}
+      />
     </div>
   );
 }
@@ -746,14 +769,19 @@ function withDeclaredTypes(fields, declared, path) {
   if (!declared) return fields;
   return fields.map((field) => {
     const chosen = declared[[...path, field.key].join('.')];
-    if (!chosen || STRUCTURAL.includes(field.type)) return field;
-    return { ...field, type: chosen };
+    if (!chosen) return field;
+    const chosenType = typeof chosen === 'object' ? chosen.type : chosen;
+    const refCollection = typeof chosen === 'object' ? chosen.collection : undefined;
+    const forces = chosenType === 'reference' || chosenType === 'multiReference';
+    if (!forces && STRUCTURAL.includes(field.type)) return field;
+    return { ...field, type: chosenType, refCollection };
   });
 }
 
 // The collection-wide type wins unless this item's own value disagrees about
 // its shape (a field that's a list here and a string there).
 function bestType(collectionType, value) {
+  if (collectionType === 'reference' || collectionType === 'multiReference') return collectionType;
   const own = inferType(value);
   if (own === 'empty') return collectionType;
   const structural = ['object', 'objects', 'list', 'boolean', 'number'];
@@ -1130,7 +1158,7 @@ function NestedItemDialog({ entry, title, projectPath, depth, onChange, onDelete
   );
 }
 
-function AddFieldRow({ onAdd, compact }) {
+function AddFieldRow({ onAdd, compact, collections }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -1139,8 +1167,9 @@ function AddFieldRow({ onAdd, compact }) {
       </button>
       {open && (
         <NewFieldDialog
-          onAdd={(key, type) => {
-            onAdd(key, type);
+          collections={collections}
+          onAdd={(key, type, targetCollection) => {
+            onAdd(key, type, targetCollection);
             setOpen(false);
           }}
           onClose={() => setOpen(false)}
@@ -1151,9 +1180,11 @@ function AddFieldRow({ onAdd, compact }) {
 }
 
 // Pick the type first — it decides what the field can hold, and it can't be
-// changed afterwards — then name it.
-function NewFieldDialog({ onAdd, onClose }) {
+// changed afterwards — then name it. Reference/multi-reference types add a
+// step in between: which collection the field points at.
+function NewFieldDialog({ onAdd, onClose, collections = [] }) {
   const [type, setType] = useState(null);
+  const [targetCollection, setTargetCollection] = useState(null);
   const [name, setName] = useState('');
   const overlayRef = useRef(null);
 
@@ -1170,9 +1201,20 @@ function NewFieldDialog({ onAdd, onClose }) {
   }, [onClose]);
 
   const info = type ? typeInfo(type) : null;
+  const isRef = type === 'reference' || type === 'multiReference';
+  const needsCollection = isRef && !targetCollection;
   const submit = () => {
     const key = keyFor(name);
-    if (key) onAdd(key, type);
+    if (key) onAdd(key, type, targetCollection);
+  };
+
+  const back = () => {
+    if (needsCollection || !isRef) {
+      setType(null);
+      setTargetCollection(null);
+    } else {
+      setTargetCollection(null);
+    }
   };
 
   return (
@@ -1184,11 +1226,17 @@ function NewFieldDialog({ onAdd, onClose }) {
       <div className="modal cms-modal cms-type-modal">
         <div className="modal-header cms-modal-header">
           {type && (
-            <button className="ghost" title="Back to field types" onClick={() => setType(null)}>
+            <button className="ghost" title="Back" onClick={back}>
               <ChevronLeftIcon size={13} />
             </button>
           )}
-          <span>{type ? `New ${info.label} field` : 'Choose a field type'}</span>
+          <span>
+            {!type
+              ? 'Choose a field type'
+              : needsCollection
+                ? `Link to which collection?`
+                : `New ${info.label} field`}
+          </span>
           <button className="ghost" title="Close" onClick={onClose}>
             <CloseIcon size={12} />
           </button>
@@ -1201,6 +1249,20 @@ function NewFieldDialog({ onAdd, onClose }) {
                 <Icon size={18} />
                 <span className="cms-type-name">{label}</span>
                 <span className="cms-type-hint">{hint}</span>
+              </button>
+            ))}
+          </div>
+        ) : needsCollection ? (
+          <div className="modal-body cms-ref-collection-list">
+            {collections.length === 0 && (
+              <div className="cms-empty-inline">No other collections yet.</div>
+            )}
+            {collections.map((c) => (
+              <button key={c.rel} className="cms-ref-option" onClick={() => setTargetCollection(c.rel)}>
+                {c.label}
+                <span className="cms-collection-count">
+                  {c.single ? '1 item' : `${c.items.length} items`}
+                </span>
               </button>
             ))}
           </div>

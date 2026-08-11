@@ -217,7 +217,7 @@ export function keyFor(name) {
 export function emptyValueFor(type) {
   if (type === 'boolean') return false;
   if (type === 'number') return 0;
-  if (type === 'list' || type === 'objects') return [];
+  if (type === 'list' || type === 'objects' || type === 'multiReference') return [];
   if (type === 'object') return {};
   return '';
 }
