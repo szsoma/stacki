@@ -10,6 +10,22 @@
   "app.cantFindFile": "Can't find a file for <{name}>.",
   "app.notEditable": "This page cannot be edited visually.",
   "app.copied": "Copied {name}",
+  "app.reuseDevServer": "Reusing the dev server already running for this project ({url}) — canvas outlines need the app's own server, so stop that one to enable them.",
+  "app.previewFailed": "Preview failed to start — see the log in the preview area.",
+  "app.removedBindings": "Removed {removed} binding{plural} that referenced {names}.",
+  "app.chunkFromFrontmatter": "This section comes from the page frontmatter — remove it from the code instead.",
+  "app.chunkCannotDuplicate": "Chunk sections are defined in the page frontmatter and cannot be duplicated here.",
+
+  "titleBar.back": "Back (Esc)",
+  "titleBar.devServer": "Dev server: {status}",
+  "titleBar.reloadPreview": "Reload preview",
+  "titleBar.openInBrowser": "Open in browser",
+  "titleBar.exitPreview": "Exit preview (Esc)",
+  "titleBar.previewSite": "Preview the site",
+  "titleBar.sitePreview": "Site preview (interactive)",
+
+  "preview.starting": "Starting Astro dev server…",
+  "preview.offline": "Preview offline",
 
   "nav.pages": "Pages",
   "nav.navigator": "Navigator",
@@ -32,6 +48,7 @@
   "pagesPanel.search": "Search pages",
   "pagesPanel.delete": "Delete page",
   "pagesPanel.deleteConfirm": "Delete {name}? This removes the file from disk.",
+  "pagesPanel.deleteFolderConfirm": "Delete the folder \"{dir}\"{suffix}? This removes files from disk.",
 
   "structurePanel.heading": "Navigator",
   "structurePanel.empty": "Select a page to edit.",
@@ -85,5 +102,7 @@
   "common.loading": "Loading…",
   "common.none": "None",
   "common.on": "On",
-  "common.off": "Off"
+  "common.off": "Off",
+  "common.style": "Style",
+  "common.settings": "Settings"
 }

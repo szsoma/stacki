@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App.jsx';
+import { I18nProvider } from './i18n/I18nContext.jsx';
 
 const harness = vi.hoisted(() => ({
   menu: new Map(),
@@ -103,7 +104,7 @@ function setupAvb() {
 }
 
 async function openProject() {
-  render(<App />);
+  render(<I18nProvider><App /></I18nProvider>);
   fireEvent.click(screen.getByRole('button', { name: 'Open project' }));
   await screen.findByRole('button', { name: 'Terminal' });
   await screen.findByTitle('Dev server: on');

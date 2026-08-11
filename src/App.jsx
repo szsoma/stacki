@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useT } from './i18n/I18nContext.jsx';
 import WelcomeScreen from './panels/WelcomeScreen.jsx';
 import PagesPanel from './panels/PagesPanel.jsx';
 import PalettePanel from './panels/PalettePanel.jsx';
@@ -425,6 +426,8 @@ export default function App() {
   const previewPathRef = useRef(null);
   const previewIframeRef = useRef(null);
 
+  const t = useT();
+
   // ----------------------------------------------------------------
   // Toasts & events
   // ----------------------------------------------------------------
@@ -520,14 +523,14 @@ export default function App() {
         setDevDiag(null);
         if (external) {
           showToast(
-            `Reusing the dev server already running for this project (${url}) — canvas outlines need the app's own server, so stop that one to enable them.`,
+            t('app.reuseDevServer', { url }),
             'info'
           );
         }
       } catch (err) {
         setDevStatus('off');
         setBusy(null);
-        showToast(`Preview failed to start — see the log in the preview area.`, 'error');
+        showToast(t('app.previewFailed'), 'error');
         const msg = cleanError(err);
         devLogRef.current = msg;
         setDevLog(msg);
@@ -651,7 +654,7 @@ export default function App() {
         scan.components.find((c) => c.name === name) ||
         scan.layouts.find((l) => l.name === name);
       if (!comp) {
-        showToast(`Can't find a file for <${name}>.`, 'error');
+        showToast(t('app.cantFindFile', { name }), 'error');
         return;
       }
       const stack = editStackRef.current;
@@ -758,7 +761,7 @@ export default function App() {
       clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(
         () => {
-          flushSave().catch((err) => showToast(`Save failed: ${cleanError(err)}`, 'error'));
+          flushSave().catch((err) => showToast(t('app.saveFailed', { error: cleanError(err) }), 'error'));
         },
         immediate ? 0 : 300
       );
@@ -917,7 +920,11 @@ export default function App() {
         const removed = stripLostBindings(node, lost);
         if (removed) {
           showToast(
-            `Removed ${removed} binding${removed === 1 ? '' : 's'} that referenced ${lost.join(', ')}.`,
+            t('app.removedBindings', {
+              removed,
+              plural: removed === 1 ? '' : 's',
+              names: lost.join(', '),
+            }),
             'info'
           );
         }
@@ -932,7 +939,7 @@ export default function App() {
       const state = pageStateRef.current.pageState;
       const target = state?.editable ? findNodeById(state.model.nodes, nodeId) : null;
       if (target?.kind === 'chunk-group') {
-        showToast('This section comes from the page frontmatter — remove it from the code instead.', 'error');
+        showToast(t('app.chunkFromFrontmatter'), 'error');
         return;
       }
       mutateModel((model) => {
@@ -974,7 +981,7 @@ export default function App() {
         // they don't exist has to drop those bindings.
         vars: loopVarsAt(state.model.nodes, nodeId),
       };
-      showToast(`Copied ${node.name || 'text'}`, 'success');
+      showToast(t('app.copied', { name: node.name || 'text' }), 'success');
     },
     [showToast]
   );
@@ -986,7 +993,7 @@ export default function App() {
       const src = findNodeById(state.model.nodes, nodeId);
       if (!src) return;
       if (src.kind === 'chunk-group' || src.chunkFile) {
-        showToast('Chunk sections are defined in the page frontmatter and cannot be duplicated here.', 'error');
+        showToast(t('app.chunkCannotDuplicate'), 'error');
         return;
       }
       const clone = cloneWithNewIds(src);
@@ -1067,9 +1074,13 @@ export default function App() {
       const removed = stripLostBindings(landed, lost);
       if (removed) {
         showToast(
-          `Removed ${removed} binding${removed === 1 ? '' : 's'} that referenced ${lost.join(', ')}.`,
-          'info'
-        );
+            t('app.removedBindings', {
+              removed,
+              plural: removed === 1 ? '' : 's',
+              names: lost.join(', '),
+            }),
+            'info'
+          );
       }
       return model;
     }, true);
@@ -1760,7 +1771,7 @@ export default function App() {
         const result = await rescan(project.path);
         const page = result.pages.find((p) => p.path === pagePath);
         if (page) selectPage(page);
-        showToast(`Created ${name}.astro`, 'success');
+        showToast(t('app.createdPage', { name: name + '.astro' }), 'success');
       } catch (err) {
         showToast(cleanError(err), 'error');
       }
@@ -1770,7 +1781,7 @@ export default function App() {
 
   const deletePage = useCallback(
     async (page) => {
-      if (!confirm(`Delete ${page.name}? This removes the file from disk.`)) return;
+      if (!confirm(t('pagesPanel.deleteConfirm', { name: page.name }))) return;
       await window.avb.deletePage(page.path);
       const result = await rescan(project.path);
       if (currentPage?.path === page.path) {
@@ -1781,7 +1792,7 @@ export default function App() {
           setPageState(null);
         }
       }
-      showToast(`Deleted ${page.name}`, 'success');
+      showToast(t('app.pageDeleted', { name: page.name }), 'success');
     },
     [project, currentPage, rescan, selectPage, showToast]
   );
@@ -1850,7 +1861,7 @@ export default function App() {
       const suffix = pageCount
         ? ` and the ${pageCount} page${pageCount === 1 ? '' : 's'} inside it`
         : '';
-      if (!confirm(`Delete the folder "${dir}"${suffix}? This removes files from disk.`)) return;
+      if (!confirm(t('pagesPanel.deleteFolderConfirm', { dir, suffix }))) return;
       try {
         await window.avb.deletePageFolder({ projectPath: project.path, dir });
         const result = await rescan(project.path);
@@ -2130,7 +2141,7 @@ export default function App() {
       fileSaveTimer.current = setTimeout(() => {
         window.avb
           .writeAssetText({ projectPath: project.path, rel, text })
-          .catch((err) => showToast(`Save failed: ${cleanError(err)}`, 'error'));
+          .catch((err) => showToast(t('app.saveFailed', { error: cleanError(err) }), 'error'));
       }, 300);
     },
     [codeWin, project, showToast]
@@ -2245,7 +2256,7 @@ export default function App() {
         {editStack.length > 1 ? (
           <button
             className="page-switch-btn comp-back"
-            title="Back (Esc)"
+            title={t('titleBar.back')}
             onClick={closeComponent}
           >
             <ChevronLeftIcon size={13} />
@@ -2259,18 +2270,18 @@ export default function App() {
         <div className="url-group">
           <span
             className={`status-dot ${devStatus === 'on' ? 'on' : devStatus === 'starting' ? 'starting' : 'off'}`}
-            title={`Dev server: ${devStatus}`}
+            title={t('titleBar.devServer', { status: devStatus })}
           />
           <button
             className="ghost"
-            title="Reload preview"
+            title={t('titleBar.reloadPreview')}
             disabled={!liveUrl}
             onClick={() => setRefreshKey((k) => k + 1)}
           >
             <RefreshIcon size={13} />
           </button>
           <span className="url">
-            {liveUrl || (devStatus === 'starting' ? 'Starting Astro dev server…' : 'Preview offline')}
+            {liveUrl || (devStatus === 'starting' ? t('preview.starting') : t('preview.offline'))}
           </span>
         </div>
         <span className="spacer" />
@@ -2278,7 +2289,7 @@ export default function App() {
         <div className="titlebar-actions">
           <button
             className="titlebar-btn"
-            title="Open in browser"
+            title={t('titleBar.openInBrowser')}
             disabled={!liveUrl}
             onClick={() => window.avb.openExternal(liveUrl)}
           >
@@ -2286,7 +2297,7 @@ export default function App() {
           </button>
           <button
             className={`titlebar-btn preview-btn ${inPreview ? 'on' : ''}`}
-            title={inPreview ? 'Exit preview (Esc)' : 'Preview the site'}
+            title={inPreview ? t('titleBar.exitPreview') : t('titleBar.previewSite')}
             disabled={!devUrl}
             onClick={() => (inPreview ? exitPreview() : enterPreview())}
           >
@@ -2478,7 +2489,7 @@ export default function App() {
 
         {inPreview && previewSrc && (
           <div className="preview-mode">
-            <iframe ref={previewIframeRef} src={previewSrc} title="Site preview (interactive)" />
+            <iframe ref={previewIframeRef} src={previewSrc} title={t('titleBar.sitePreview')} />
           </div>
         )}
 
@@ -2487,8 +2498,8 @@ export default function App() {
             <div className="right-tabs">
               {rightTabInd && <span className="right-tabs-indicator" style={rightTabInd} />}
               {[
-                { id: 'style', label: 'Style' },
-                { id: 'settings', label: 'Settings' },
+                { id: 'style', label: t('common.style') },
+                { id: 'settings', label: t('common.settings') },
               ].map((t) => (
                 <button
                   key={t.id}
