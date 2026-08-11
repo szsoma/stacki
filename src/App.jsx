@@ -73,6 +73,9 @@ import {
   stripLostBindings,
 } from './model/loops.ts';
 
+import { useAppStore, getState } from './store/index.ts';
+import * as mutations from './store/mutations';
+
 // Strips the project root off an absolute filesystem path so it reads like
 // the project-relative paths the Selected Files chip already uses (and so a
 // prompt heading into the terminal never leaks the user's home directory).

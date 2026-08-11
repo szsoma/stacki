@@ -33,12 +33,12 @@ describe('uiSlice', () => {
     expect(store.getState().rightTab).toBe('style');
   });
 
-  it('shows a toast and clears it after 2.5s', () => {
+  it('shows a toast and clears it after 5s', () => {
     vi.useFakeTimers();
     const store = createAppStore();
     store.getState().showToast('saved', 'info');
     expect(store.getState().toast).toEqual({ msg: 'saved', kind: 'info' });
-    vi.advanceTimersByTime(2500);
+    vi.advanceTimersByTime(5000);
     expect(store.getState().toast).toBeNull();
   });
 

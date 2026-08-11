@@ -50,7 +50,7 @@ export const createUiSlice: StateCreator<UiSlice, [], [], UiSlice> = (set) => ({
   showToast: (msg, kind = 'info') => {
     clearTimeout(toastTimer);
     set({ toast: { msg, kind } });
-    toastTimer = setTimeout(() => set({ toast: null }), 2500);
+    toastTimer = setTimeout(() => set({ toast: null }), 5000);
   },
   setAssetPick: (assetPick) => set({ assetPick }),
   setCmsRel: (cmsRel) => set({ cmsRel }),
