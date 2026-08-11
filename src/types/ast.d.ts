@@ -18,11 +18,21 @@ export type NodeKind =
   | 'expr'
   | 'raw'
   | 'raw-line'
-  | 'map';
+  | 'map'
+  | 'chunk-group';
 
 interface NodeBase {
   id: string;
   kind: NodeKind;
+  name?: string;
+  value?: string;
+  props?: Props;
+  children?: AstroNode[] | null;
+  inner?: string;
+  head?: string;
+  dynamicTag?: boolean;
+  chunkFile?: string;
+  chunkAggregate?: any;
 }
 
 export interface ElementNode extends NodeBase {
@@ -66,6 +76,16 @@ export interface MapNode extends NodeBase {
   children: AstroNode[];
 }
 
+/** A resolved chunk container whose children come from external HTML files. */
+export interface ChunkGroupNode extends NodeBase {
+  kind: 'chunk-group';
+  name: string;
+  props: Props;
+  children: AstroNode[] | null;
+  chunkFile?: string;
+  chunkAggregate?: any;
+}
+
 export type AstroNode =
   | ElementNode
   | TextNode
@@ -73,7 +93,8 @@ export type AstroNode =
   | ExprNode
   | RawNode
   | RawLineNode
-  | MapNode;
+  | MapNode
+  | ChunkGroupNode;
 
 export interface PageModel {
   imports: ImportDecl[];

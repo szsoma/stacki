@@ -13,6 +13,15 @@
 // Pages whose template can't be represented (stray '<', unclosed tags,
 // fragments) are reported as not editable so the UI falls back to code view.
 
+// @ts-check
+/**
+ * @typedef {import('../src/types/ast').AstroNode} AstroNode
+ * @typedef {import('../src/types/ast').PageModel} PageModel
+ * @typedef {import('../src/types/ast').Props} Props
+ * @typedef {import('../src/types/ast').PropValue} PropValue
+ * @typedef {import('../src/types/ast').ImportDecl} ImportDecl
+ */
+
 const fs = require('fs');
 const path = require('path');
 
@@ -32,7 +41,9 @@ const makeId = () => `n${nextId++}`;
 
 // Values: {type:'string', value} | {type:'expr', value} | {type:'bare'}
 // Expression values may contain one level of nested braces (attrs={{ a: 1 }}).
+/** @param {string} attrString @returns {import('../src/types/ast').Props} */
 function parseAttrs(attrString) {
+  /** @type {import('../src/types/ast').Props} */
   const props = {};
   const re = /([\w@:.-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|\{((?:[^{}]|\{[^{}]*\})*)\}))?/g;
   let m;
@@ -47,6 +58,7 @@ function parseAttrs(attrString) {
   return props;
 }
 
+/** @param {import('../src/types/ast').Props | undefined} props @returns {string} */
 function serializeAttrs(props) {
   const parts = [];
   for (const [name, v] of Object.entries(props || {})) {
@@ -69,6 +81,7 @@ const TAG_RE = /<([A-Za-z][\w.-]*)((?:[^>"'{]|"[^"]*"|'[^']*'|\{(?:[^{}]|\{[^{}]
 
 // Finds the index of the '}' matching the '{' at `start`, skipping string
 // and template literals so quotes/braces inside them don't confuse counting.
+/** @param {string} str @param {number} start @returns {number} */
 function findMatchingBrace(str, start) {
   let depth = 0;
   for (let i = start; i < str.length; i++) {
@@ -91,6 +104,7 @@ function findMatchingBrace(str, start) {
 }
 
 // Finds the index of the ')' matching the '(' at `start`, skipping strings.
+/** @param {string} str @param {number} start @returns {number} */
 function findMatchingParen(str, start) {
   let depth = 0;
   for (let i = start; i < str.length; i++) {
@@ -115,6 +129,7 @@ function findMatchingParen(str, start) {
 // Recognizes {items.map((item) => ( <JSX/> ))} and turns it into a 'map'
 // node whose JSX body is a parsed child tree (editable in the navigator).
 // Returns null when the expression doesn't fit the pattern.
+/** @param {string} exprText @returns {AstroNode | null} */
 function tryParseMap(exprText) {
   const inner = exprText.slice(1, -1); // strip the outer { }
   const arrow = inner.match(/^([\s\S]*?\.map\(\s*\(([^)]*)\)\s*=>\s*\()/);
@@ -138,7 +153,9 @@ function tryParseMap(exprText) {
 
 // Parses a template string into a node tree.
 // Returns {nodes, clean}; clean=false means unrepresentable content was found.
+/** @param {string} str @returns {{ nodes: AstroNode[], clean: boolean }} */
 function parseTemplate(str) {
+  /** @type {AstroNode[]} */
   const nodes = [];
   let pos = 0;
 
@@ -247,6 +264,7 @@ function parseTemplate(str) {
 
 // Index of the close tag matching an already-consumed open tag, handling
 // nested same-name tags.
+/** @param {string} str @param {number} from @param {string} name @returns {number} */
 function findMatchingClose(str, from, name) {
   const re = new RegExp(
     `<${escapeRe(name)}(?=[\\s/>])(?:[^>"']|"[^"]*"|'[^']*')*?(/?)>|</${escapeRe(name)}\\s*>`,
@@ -266,10 +284,12 @@ function findMatchingClose(str, from, name) {
   return -1;
 }
 
+/** @param {string} s @returns {string} */
 function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** @param {string} text @returns {string} */
 function collapseWhitespace(text) {
   return text.replace(/\s+/g, ' ').trim();
 }
@@ -282,6 +302,10 @@ function collapseWhitespace(text) {
 // model = {imports, extraFrontmatter, nodes: tree}. The page's layout wrapper
 // (if any) stays in the tree as a regular node with the well-known id
 // 'layout', so nodes can live before/after it at the top level.
+/**
+ * @param {string} source
+ * @returns {{ editable: true, model: PageModel } | { editable: false, reason: string }}
+ */
 function parsePage(source) {
   const fm = source.match(/^---\r?\n(?:([\s\S]*?)\r?\n)?---\r?\n?/);
   const frontmatter = fm ? fm[1] || '' : '';
@@ -334,6 +358,7 @@ function parsePage(source) {
   // `const Tag = tag` then `<Tag>` is how an Astro component renders a
   // caller-chosen element. Flag those so the UI treats them as elements —
   // they have no file to open and no props of their own.
+  /** @param {AstroNode[]} list @returns {void} */
   const markDynamic = (list) => {
     for (const n of list) {
       if (n.kind === 'component' && !importsByName[n.name]) n.dynamicTag = true;
@@ -345,6 +370,7 @@ function parsePage(source) {
   return { editable: true, model: { imports, extraFrontmatter, nodes: topNodes } };
 }
 
+/** @param {PageModel} model @returns {string} */
 function serializePage(model) {
   const lines = ['---'];
   for (const imp of model.imports) {
@@ -367,10 +393,12 @@ const INLINE_TAGS = new Set([
 ]);
 
 // Simple {expr} interpolations (single braces, no JSX) count as inline.
+/** @param {AstroNode} n @returns {boolean} */
 function isSimpleExpr(n) {
   return n.kind === 'expr' && /^\{[^{}]*\}$/.test(n.value) && !n.value.includes('<');
 }
 
+/** @param {AstroNode[]} nodes @returns {boolean} */
 function isInlineRun(nodes) {
   return (
     nodes.length > 0 &&
@@ -385,26 +413,34 @@ function isInlineRun(nodes) {
   );
 }
 
+/** @param {AstroNode[]} nodes @returns {string} */
 function inlineString(nodes) {
+  /** @type {string} */
   let out = '';
   for (const n of nodes) {
-    if (n.kind === 'text') out += n.value;
-    else if (n.kind === 'expr') out += n.value;
-    else if (n.children === null || n.children.length === 0) {
-      out += n.name === 'br' ? '<br />' : `<${n.name}${serializeAttrs(n.props)} />`;
-    } else {
-      out += `<${n.name}${serializeAttrs(n.props)}>${inlineString(n.children)}</${n.name}>`;
+    if (n.kind === 'text') out += /** @type {import('../src/types/ast').TextNode} */ (n).value;
+    else if (n.kind === 'expr') out += /** @type {import('../src/types/ast').ExprNode} */ (n).value;
+    else {
+      const en = /** @type {import('../src/types/ast').ElementNode | import('../src/types/ast').ChunkGroupNode} */ (n);
+      if (en.children === null || en.children.length === 0) {
+        out += en.name === 'br' ? '<br />' : `<${en.name}${serializeAttrs(en.props)} />`;
+      } else {
+        out += `<${en.name}${serializeAttrs(en.props)}>${inlineString(en.children)}</${en.name}>`;
+      }
     }
   }
   return out;
 }
 
+/** @param {AstroNode} node @param {number|string} indent @param {string[]} lines @returns {void} */
 function serializeNode(node, indent, lines) {
   // Chunk containers: children live in external .html files (set:html),
   // never in the page — emit the component self-closing, skip the subtree.
   if (node.kind === 'chunk-group') return; // synthetic, not in page source
-  if (node.chunkFile || node.chunkAggregate) {
-    lines.push(`${indent}<${node.name}${serializeAttrs(node.props)} />`);
+  if (/** @type {import('../src/types/ast').ChunkGroupNode} */ (/** @type {unknown} */ (node)).chunkFile ||
+      /** @type {import('../src/types/ast').ChunkGroupNode} */ (/** @type {unknown} */ (node)).chunkAggregate) {
+    const cn = /** @type {import('../src/types/ast').ChunkGroupNode} */ (/** @type {unknown} */ (node));
+    lines.push(`${indent}<${cn.name}${serializeAttrs(cn.props)} />`);
     return;
   }
   switch (node.kind) {
@@ -469,6 +505,7 @@ function serializeNode(node, indent, lines) {
 // path and the dev plugin marks the chunk module itself. Passing it through
 // the id (rather than a side map) also keys Vite's cache: move the Fragment
 // and the chunk module's id changes with it.
+/** @param {PageModel} model @returns {string} */
 function serializePageMarked(model) {
   const marks = chunkImportMarks(model);
   const lines = ['---'];
@@ -487,29 +524,32 @@ function serializePageMarked(model) {
   return lines.join('\n') + '\n';
 }
 
+/** @param {AstroNode} node @param {number|string} indent @param {string[]} lines @param {string} path @returns {void} */
 function serializeNodeMarked(node, indent, lines, path) {
   if (node.kind === 'chunk-group') return; // synthetic, not in page source
   // A slotted node's markers must go into the same named slot, or they'd
   // land in the default slot while the node renders elsewhere.
-  const slotVal = node.props?.slot;
+  // Type narrowing: during serialization, we access properties common to
+  // element/component/chunk-group/map nodes that don't exist on every
+  // union member — use a broader structural type for this phase.
+  const n = /** @type {{ props?: Props, children?: AstroNode[] | null, name?: string, chunkFile?: string, chunkAggregate?: any, kind?: string }} */ (node);
+  const slotVal = n.props?.slot;
   const slotAttr =
     slotVal && slotVal.type === 'string' && slotVal.value ? ` slot="${slotVal.value}"` : '';
   lines.push(`${indent}<template${slotAttr} data-avb-s="${path}"></template>`);
   if (
-    (node.kind === 'component' || node.kind === 'element') &&
-    !node.chunkFile &&
-    !node.chunkAggregate &&
-    Array.isArray(node.children) &&
-    // Inline runs serialize as one line — markers between words would break
-    // spacing (each marker's surrounding newlines render as a space).
-    !(node.children.length > 0 && isInlineRun(node.children))
+    (n.kind === 'component' || n.kind === 'element') &&
+    !n.chunkFile &&
+    !n.chunkAggregate &&
+    Array.isArray(n.children) &&
+    !(n.children.length > 0 && isInlineRun(n.children))
   ) {
-    const attrs = serializeAttrs(node.props);
-    lines.push(`${indent}<${node.name}${attrs}>`);
-    node.children.forEach((child, i) =>
+    const attrs = serializeAttrs(n.props);
+    lines.push(`${indent}<${n.name}${attrs}>`);
+    n.children.forEach((child, i) =>
       serializeNodeMarked(child, indent + '  ', lines, `${path}.${i}`)
     );
-    lines.push(`${indent}</${node.name}>`);
+    lines.push(`${indent}</${n.name}>`);
   } else if (node.kind === 'map') {
     // Loop children render once per item, so their marker pairs repeat in
     // the DOM — the collector unions every instance into one region.
@@ -530,7 +570,11 @@ function serializeNodeMarked(node, indent, lines, path) {
 // Component prop schema extraction
 // ---------------------------------------------------------------------------
 
-// Returns [{name, type: 'string'|'number'|'boolean'|'other', optional, default}]
+/**
+ * Returns [{name, type: 'string'|'number'|'boolean'|'other', optional, default}]
+ * @param {string} source
+ * @returns {{ name: string, type: string, optional?: boolean, default?: any }[]}
+ */
 function parsePropSchema(source) {
   const fm = source.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   const frontmatter = fm ? fm[1] : '';
@@ -550,8 +594,9 @@ function parsePropSchema(source) {
     const entryRe = /^\s*(\w+)(\?)?\s*:\s*([^;\n]+?)[;,]?\s*$/gm;
     let m;
     while ((m = entryRe.exec(iface[1])) !== null) {
+      /** @type {string} */
       let typeStr = m[3].trim();
-      if (aliases.has(typeStr)) typeStr = aliases.get(typeStr);
+      if (aliases.has(typeStr)) typeStr = /** @type {string} */ (aliases.get(typeStr));
       const { type, options } = normalizeType(typeStr);
       schema.set(m[1], {
         name: m[1],
@@ -614,6 +659,7 @@ function parsePropSchema(source) {
 
 // Slot names a component's template exposes: 'default' for <slot>/<slot />,
 // plus any <slot name="x">. Default first, then named in appearance order.
+/** @param {string} source @returns {string[]} */
 function parseSlots(source) {
   const fm = source.match(/^---\r?\n(?:[\s\S]*?\r?\n)?---\r?\n?/);
   const body = fm ? source.slice(fm[0].length) : source;
@@ -630,6 +676,7 @@ function parseSlots(source) {
 
 // Extracts the tag from `interface Props extends HTMLAttributes<"button">`
 // so the UI can offer that element's built-in attributes (type, disabled, …).
+/** @param {string} source @returns {string | null} */
 function parseExtendsTag(source) {
   const fm = source.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   const frontmatter = fm ? fm[1] : '';
@@ -639,6 +686,7 @@ function parseExtendsTag(source) {
   return m ? m[1] : null;
 }
 
+/** @param {string} t @returns {{ type: string, options?: string[] }} */
 function normalizeType(t) {
   // Union of string literals ('primary' | 'secondary') → enum with options.
   const parts = t.split('|').map((s) => s.trim()).filter(Boolean);
@@ -660,7 +708,9 @@ function normalizeType(t) {
 }
 
 // Serializes a plain node list (used for standalone HTML chunk files).
+/** @param {AstroNode[]} nodes @returns {string} */
 function serializeNodes(nodes) {
+  /** @type {string[]} */
   const lines = [];
   for (const node of nodes) serializeNode(node, '', lines);
   return lines.join('\n') + '\n';
@@ -676,6 +726,7 @@ function serializeNodes(nodes) {
 
 let chunkGroupId = 1;
 
+/** @param {PageModel} model @param {string} pagePath @returns {PageModel | undefined} */
 function resolveChunks(model, pagePath) {
   // ident -> absolute chunk file path
   const rawImports = new Map();
@@ -700,6 +751,7 @@ function resolveChunks(model, pagePath) {
     }
   }
 
+  /** @param {string} filePath @returns {AstroNode[] | null} */
   const parseChunkFile = (filePath) => {
     try {
       const { nodes, clean } = parseTemplate(fs.readFileSync(filePath, 'utf8'));
@@ -709,47 +761,50 @@ function resolveChunks(model, pagePath) {
     }
   };
 
+  /** @param {AstroNode[]} list @returns {void} */
   const walk = (list) => {
     for (const node of list) {
-      if (
-        node.kind === 'component' &&
-        node.props?.['set:html']?.type === 'expr' &&
-        node.children == null
-      ) {
-        const ref = node.props['set:html'].value.trim();
-        if (rawImports.has(ref)) {
-          const file = rawImports.get(ref);
-          const children = parseChunkFile(file);
-          if (children) {
-            node.chunkFile = file;
-            node.children = children;
-          }
-          continue;
-        }
-        if (aggregates.has(ref)) {
-          const groups = [];
-          for (const ident of aggregates.get(ref)) {
-            if (!rawImports.has(ident)) continue;
-            const file = rawImports.get(ident);
-            const children = parseChunkFile(file);
-            if (children) {
-              groups.push({
-                id: `chunk${chunkGroupId++}`,
-                kind: 'chunk-group',
-                name: ident,
-                chunkFile: file,
-                children,
-              });
+          /** @type {{ chunkFile?: string, chunkAggregate?: any, children?: AstroNode[] | null, kind?: string, name?: string, props?: Props }} */
+          const n = node;
+          if (
+            n.kind === 'component' &&
+            n.props?.['set:html']?.type === 'expr' &&
+            n.children == null
+          ) {
+            const ref = /** @type {import('../src/types/ast').PropValue & { value: string }} */ (n.props['set:html']).value.trim();
+            if (rawImports.has(ref)) {
+              const file = rawImports.get(ref);
+              const children = parseChunkFile(file);
+              if (children) {
+                n.chunkFile = file;
+                n.children = children;
+              }
+              continue;
+            }
+            if (aggregates.has(ref)) {
+              const groups = [];
+              for (const ident of aggregates.get(ref)) {
+                if (!rawImports.has(ident)) continue;
+                const file = rawImports.get(ident);
+                const children = parseChunkFile(file);
+                if (children) {
+                  groups.push({
+                    id: `chunk${chunkGroupId++}`,
+                    kind: 'chunk-group',
+                    name: ident,
+                    chunkFile: file,
+                    children,
+                  });
+                }
+              }
+              if (groups.length) {
+                n.children = /** @type {any} */ (groups);
+                n.chunkAggregate = true;
+              }
+              continue;
             }
           }
-          if (groups.length) {
-            node.children = groups;
-            node.chunkAggregate = true;
-          }
-          continue;
-        }
-      }
-      if (Array.isArray(node.children)) walk(node.children);
+          if (Array.isArray(n.children)) walk(n.children);
     }
   };
   walk(model.nodes);
@@ -759,14 +814,18 @@ function resolveChunks(model, pagePath) {
 // import's identifier: the Fragment's own path for a lone chunk, the
 // chunk-group's path for each member of a joined aggregate. Requires a model
 // that's been through resolveChunks.
+/** @param {PageModel} model @returns {any} */
 function chunkImportMarks(model) {
   const marks = new Map();
+  /** @param {AstroNode[]} list @param {string} prefix @returns {void} */
   const walk = (list, prefix) => {
-    list.forEach((node, i) => {
+    list.forEach((/** @type {AstroNode} */ nd, /** @type {number} */ i) => {
       const p = prefix ? `${prefix}.${i}` : String(i);
+      /** @type {{ chunkFile?: string, kind?: string, name?: string, props?: Props, children?: AstroNode[] | null }} */
+      const node = nd;
       if (node.chunkFile) {
         const group = node.kind === 'chunk-group';
-        const ident = group ? node.name : node.props?.['set:html']?.value?.trim();
+        const ident = group ? node.name : /** @type {{ value?: string }} */ (node.props?.['set:html']).value?.trim();
         if (ident) marks.set(ident, { path: p, group });
       }
       if (Array.isArray(node.children)) walk(node.children, p);
@@ -781,9 +840,11 @@ function chunkImportMarks(model) {
 // chunk nodes address identically to the app's tree. A group also gets a
 // marker pair of its own — nothing in the page wraps it. Returns null when
 // the chunk isn't representable, so the caller can serve it unmarked.
+/** @param {string} source @param {string} prefix @param {string} group @returns {string | null} */
 function markChunkHtml(source, prefix, group) {
   const { nodes, clean } = parseTemplate(source);
   if (!clean) return null;
+  /** @type {string[]} */
   const lines = [];
   if (group) lines.push(`<template data-avb-s="${prefix}"></template>`);
   nodes.forEach((node, i) => serializeNodeMarked(node, '', lines, `${prefix}.${i}`));
