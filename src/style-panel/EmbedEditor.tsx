@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { DeclRow } from './DeclRow'
-import { PropertyCombobox } from './PropertyCombobox'
+
 import { isSupportedCssValue } from './ResolvedRows'
 import { StyleCard } from './StyleCard'
 import { loadEmbedSource, saveEmbedSource } from './shared/tool-prefs'
@@ -36,7 +35,7 @@ import {
   setDeclarationValue,
   splitRuleSelectorAt,
 } from './lib/css'
-import { canonicalCompound, compareSpecificity, formatSpecificity, parseSelectorList, type MatchTarget } from './lib/selectors'
+import { canonicalCompound, compareSpecificity, parseSelectorList, type MatchTarget } from './lib/selectors'
 import {
   applyNativePropertyAt,
   applyNativeToNewBaseClass,
@@ -59,7 +58,6 @@ import {
   liveSetNativeProperty,
   nativeStylingAvailable,
   webflowApi,
-  webflowClassToCss,
   writeEmbedDoc,
   type EmbedDoc,
   type EmbedScan,
@@ -68,7 +66,7 @@ import {
 import type { BreakpointId, ElementSnapshot, NativeModel, ParsedDeclaration, ParsedRule, Specificity } from './lib/types'
 import './embed-editor.css'
 
-import { headerLabel, standaloneNativeClass, normalizeSelector, computePlaceholders } from './embedHelpers'
+import { standaloneNativeClass, computePlaceholders } from './embedHelpers'
 import type { Placeholder } from './embedHelpers'
 import { SaveIndicator } from './EditorIcons'
 import { EMBED_ONLY_PROPS } from './propertySets'
