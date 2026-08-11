@@ -44,7 +44,9 @@ import {
   keyFor,
   isPlainObject,
   reassemble,
+  ensureIds,
 } from '../cmsSchema.js';
+import { ReferenceControl, MultiReferenceControl } from './CmsReferenceField.jsx';
 
 const SAVE_DELAY = 400;
 
@@ -195,6 +197,33 @@ export default function CmsView({
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(flush, SAVE_DELAY);
   };
+
+  // Resolves a target collection's items for a reference picker, assigning
+  // any of them a hidden `_id` (and persisting it) the first time they're
+  // actually linkable. If the target is the collection currently open here,
+  // the new ids are merged into local state too, so the next save doesn't
+  // overwrite the file and drop them again.
+  const resolveCollection = useCallback(
+    async (targetRel) => {
+      const { data } = await window.avb.readCms({ projectPath: project.path, rel: targetRel });
+      const name = targetRel.slice(targetRel.lastIndexOf('/') + 1);
+      const dir = targetRel.includes('/') ? targetRel.slice(0, targetRel.lastIndexOf('/')) : '';
+      const col = collectionOf({ rel: targetRel, name, dir, data });
+      const { items: withIds, changed } = ensureIds(col.items);
+      if (!changed) return col.items;
+      await window.avb.writeCms({ projectPath: project.path, rel: targetRel, data: reassemble(col, withIds) });
+      if (targetRel === rel) {
+        const merge = (arr) =>
+          arr.map((it, i) => (isPlainObject(it) && !it._id && withIds[i]?._id ? { ...it, _id: withIds[i]._id } : it));
+        setItems((prev) => {
+          if (pending.current) pending.current = merge(pending.current);
+          return merge(prev);
+        });
+      }
+      return withIds;
+    },
+    [project.path, rel]
+  );
 
   const fields = useMemo(
     () => withDeclaredTypes(fieldsOf(items), declared, []),
@@ -485,6 +514,10 @@ export default function CmsView({
                   }
                   value={item[field.key]}
                   projectPath={project.path}
+                  refCollection={field.refCollection}
+                  declared={declared}
+                  path={[field.key]}
+                  resolveCollection={resolveCollection}
                   onChange={(v) => setItemValue(field.key, v)}
                 />
               ))}
@@ -797,7 +830,18 @@ function bestType(collectionType, value) {
 // Fields
 // ---------------------------------------------------------------------------
 
-function FieldRow({ label, type, value, onChange, projectPath, depth = 0 }) {
+function FieldRow({
+  label,
+  type,
+  value,
+  onChange,
+  projectPath,
+  depth = 0,
+  refCollection,
+  declared,
+  path,
+  resolveCollection,
+}) {
   // Typing an 81st character turns a text field into a paragraph one, and
   // swapping <input> for <textarea> mid-word would take the caret with it.
   // The control only changes shape while the field is idle.
@@ -820,12 +864,16 @@ function FieldRow({ label, type, value, onChange, projectPath, depth = 0 }) {
         onChange={onChange}
         projectPath={projectPath}
         depth={depth}
+        refCollection={refCollection}
+        declared={declared}
+        path={path}
+        resolveCollection={resolveCollection}
       />
     </div>
   );
 }
 
-function FieldControl({ type, value, onChange, projectPath, depth }) {
+function FieldControl({ type, value, onChange, projectPath, depth, refCollection, declared, path, resolveCollection }) {
   if (type === 'boolean') {
     return (
       <button
@@ -920,6 +968,9 @@ function FieldControl({ type, value, onChange, projectPath, depth }) {
         onChange={onChange}
         projectPath={projectPath}
         depth={depth + 1}
+        declared={declared}
+        path={path}
+        resolveCollection={resolveCollection}
       />
     );
   }
@@ -931,6 +982,31 @@ function FieldControl({ type, value, onChange, projectPath, depth }) {
         onChange={onChange}
         projectPath={projectPath}
         depth={depth + 1}
+        declared={declared}
+        path={path}
+        resolveCollection={resolveCollection}
+      />
+    );
+  }
+
+  if (type === 'reference') {
+    return (
+      <ReferenceControl
+        value={value ?? ''}
+        onChange={onChange}
+        collectionRel={refCollection}
+        resolveCollection={resolveCollection}
+      />
+    );
+  }
+
+  if (type === 'multiReference') {
+    return (
+      <MultiReferenceControl
+        value={Array.isArray(value) ? value : []}
+        onChange={onChange}
+        collectionRel={refCollection}
+        resolveCollection={resolveCollection}
       />
     );
   }
@@ -969,8 +1045,8 @@ function ListEditor({ value, onChange }) {
 }
 
 // A nested object: its keys become fields one level in.
-function GroupEditor({ value, onChange, projectPath, depth }) {
-  const fields = fieldsOf([value]);
+function GroupEditor({ value, onChange, projectPath, depth, declared, path, resolveCollection }) {
+  const fields = withDeclaredTypes(fieldsOf([value]), declared, path);
   return (
     <div className="cms-group-box">
       {fields.map((field) => (
@@ -981,6 +1057,10 @@ function GroupEditor({ value, onChange, projectPath, depth }) {
           value={value[field.key]}
           projectPath={projectPath}
           depth={depth}
+          refCollection={field.refCollection}
+          declared={declared}
+          path={[...path, field.key]}
+          resolveCollection={resolveCollection}
           onChange={(v) => onChange({ ...value, [field.key]: v })}
         />
       ))}
@@ -992,7 +1072,7 @@ function GroupEditor({ value, onChange, projectPath, depth }) {
 // Array of objects — a list inside an item (nav links, stats, steps). Each
 // entry is one row showing its name; the fields behind it open in a dialog,
 // so a long item doesn't push the rest of the form off the screen.
-function RepeaterEditor({ value, onChange, projectPath, depth }) {
+function RepeaterEditor({ value, onChange, projectPath, depth, declared, path, resolveCollection }) {
   const [openIndex, setOpenIndex] = useState(null);
   const [dragIndex, setDragIndex] = useState(null);
   const [dropIndex, setDropIndex] = useState(null);
@@ -1081,6 +1161,9 @@ function RepeaterEditor({ value, onChange, projectPath, depth }) {
           title={titleOf(value[openIndex], openIndex)}
           projectPath={projectPath}
           depth={depth}
+          declared={declared}
+          path={path}
+          resolveCollection={resolveCollection}
           onChange={(next) => {
             const copy = [...value];
             copy[openIndex] = next;
@@ -1096,9 +1179,9 @@ function RepeaterEditor({ value, onChange, projectPath, depth }) {
 
 // One entry of a repeater, in a dialog. Edits apply as they're typed — the
 // buttons are for leaving and removing, not for committing.
-function NestedItemDialog({ entry, title, projectPath, depth, onChange, onDelete, onClose }) {
+function NestedItemDialog({ entry, title, projectPath, depth, declared, path, resolveCollection, onChange, onDelete, onClose }) {
   const overlayRef = useRef(null);
-  const fields = fieldsOf([entry]);
+  const fields = withDeclaredTypes(fieldsOf([entry]), declared, path);
 
   // Escape closes the innermost dialog only: an entry can itself hold a
   // repeater, so these stack.
@@ -1136,6 +1219,10 @@ function NestedItemDialog({ entry, title, projectPath, depth, onChange, onDelete
               value={entry[field.key]}
               projectPath={projectPath}
               depth={depth}
+              refCollection={field.refCollection}
+              declared={declared}
+              path={[...path, field.key]}
+              resolveCollection={resolveCollection}
               onChange={(v) => onChange({ ...entry, [field.key]: v })}
             />
           ))}

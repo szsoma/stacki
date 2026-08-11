@@ -719,6 +719,14 @@ export const SearchIcon = (p) => (
   </I>
 );
 
+export const WarningIcon = (p) => (
+  <I {...p}>
+    <path d="M8 2.3 14.2 13a1 1 0 0 1-.87 1.5H2.67A1 1 0 0 1 1.8 13L8 2.3Z" />
+    <path d="M8 6.3v3" />
+    <path d="M8 11.6h.01" strokeWidth="2" />
+  </I>
+);
+
 export const ReferenceIcon = (p) => (
   <I {...p}>
     <path d="M6.8 9.2 9.2 6.8" />
