@@ -369,6 +369,29 @@ export default function CmsView({
     commit(applyToItems(items, path, orderKeys(keys)));
   };
 
+  const toggleRequired = (path, key, value) => {
+    const dotted = [...path, key].join('.');
+    const existing = declared[dotted];
+    const inferredType = fieldsAt(items, path).find((f) => f.key === key)?.type || 'text';
+    const entry = existing
+      ? (typeof existing === 'object' ? existing : { type: existing })
+      : { type: inferredType };
+    saveDeclared({ ...declared, [dotted]: { ...entry, required: value } });
+  };
+
+  const setDescription = (path, key, description) => {
+    const dotted = [...path, key].join('.');
+    const existing = declared[dotted];
+    const inferredType = fieldsAt(items, path).find((f) => f.key === key)?.type || 'text';
+    const entry = existing
+      ? (typeof existing === 'object' ? existing : { type: existing })
+      : { type: inferredType };
+    saveDeclared({
+      ...declared,
+      [dotted]: { ...entry, description: description || null },
+    });
+  };
+
   if (settings) {
     return (
       <div className={`cms-view ${hidden ? 'hidden' : ''}`}>
@@ -384,6 +407,8 @@ export default function CmsView({
           onRenameField={renameFieldAt}
           onRemoveField={removeFieldAt}
           onReorderFields={reorderFieldsAt}
+          onToggleRequired={toggleRequired}
+          onSetDescription={setDescription}
           onJumpToItem={onJumpToItem}
           onDone={onCloseSettings}
         />
@@ -604,6 +629,8 @@ function CmsSettings({
   onRenameField,
   onRemoveField,
   onReorderFields,
+  onToggleRequired,
+  onSetDescription,
   onJumpToItem,
   onDone,
 }) {
@@ -652,6 +679,8 @@ function CmsSettings({
             onRenameField={onRenameField}
             onRemoveField={onRemoveField}
             onReorderFields={onReorderFields}
+            onToggleRequired={onToggleRequired}
+            onSetDescription={onSetDescription}
           />
         </div>
 
