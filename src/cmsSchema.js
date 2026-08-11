@@ -264,6 +264,48 @@ export function objectsAt(items, path) {
   return current;
 }
 
+// Like objectsAt, but remembers how to get back to each object: which
+// top-level item it came from, and the chain of object keys / array indices
+// beneath it. Used to edit or clear a single nested occurrence of a field
+// without touching every other item that happens to share the same path.
+export function addressesAt(items, path) {
+  let current = items
+    .map((item, itemIndex) => (isPlainObject(item) ? { itemIndex, steps: [], obj: item } : null))
+    .filter(Boolean);
+  for (const key of path) {
+    const next = [];
+    for (const { itemIndex, steps, obj } of current) {
+      const value = obj[key];
+      if (Array.isArray(value)) {
+        value.forEach((entry, i) => {
+          if (isPlainObject(entry)) next.push({ itemIndex, steps: [...steps, key, i], obj: entry });
+        });
+      } else if (isPlainObject(value)) {
+        next.push({ itemIndex, steps: [...steps, key], obj: value });
+      }
+    }
+    current = next;
+  }
+  return current;
+}
+
+// Rebuilds one item so the object living at `steps` gets `[key]: value`,
+// copying only the objects/arrays along the way — every other item, and
+// everything else in this item, keeps its original reference.
+export function setAtAddress(items, itemIndex, steps, key, value) {
+  const setIn = (node, rest) => {
+    if (!rest.length) return { ...node, [key]: value };
+    const [head, ...tail] = rest;
+    if (typeof head === 'number') {
+      const arr = [...node];
+      arr[head] = setIn(arr[head], tail);
+      return arr;
+    }
+    return { ...node, [head]: setIn(node[head], tail) };
+  };
+  return items.map((item, i) => (i === itemIndex ? setIn(item, steps) : item));
+}
+
 export const fieldsAt = (items, path) => fieldsOf(objectsAt(items, path));
 
 function transformAt(value, path, fn) {
