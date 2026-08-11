@@ -3152,3 +3152,25 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
   justify-content: space-between;
   border: 1px solid var(--border);
 }
+
+.cms-guard-modal { width: 520px; }
+.cms-guard-body { display: flex; flex-direction: column; gap: 10px; }
+.cms-guard-list { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; }
+.cms-guard-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 69, 58, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 69, 58, 0.08);
+  color: var(--text-dim);
+}
+.cms-guard-row svg { color: var(--red); flex-shrink: 0; }
+.cms-guard-row-text { flex: 1; min-width: 0; font-size: 11.5px; line-height: 1.4; }
+.cms-guard-row-text strong { color: var(--text); font-weight: 600; }
+.cms-guard-row-actions { display: flex; gap: 4px; opacity: 0; flex-shrink: 0; }
+.cms-guard-row:hover .cms-guard-row-actions { opacity: 1; }
+.cms-guard-row-actions .ghost { font-size: 11px; padding: 3px 6px; color: var(--text-dim); }
+.cms-guard-row-actions .ghost.danger:hover { color: var(--red); background: rgba(255, 69, 58, 0.14); }
+.cms-guard-clear { display: flex; align-items: center; gap: 6px; color: var(--green); font-size: 11.5px; }

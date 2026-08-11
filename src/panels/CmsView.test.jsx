@@ -162,3 +162,77 @@ describe('editing a multi-reference value', () => {
     await waitFor(() => expect(screen.queryByText('News')).not.toBeInTheDocument());
   });
 });
+
+describe('deleting an item that is referenced elsewhere', () => {
+  it('blocks the delete until the reference is resolved', async () => {
+    mockAvb({
+      files: {
+        'data/authors.json': [{ _id: 'a1', name: 'Ada' }],
+        'data/posts.json': [{ title: 'Hello', author: 'a1' }],
+      },
+      meta: { 'data/posts.json': { author: { type: 'reference', collection: 'data/authors.json' } } },
+    });
+    render(<CmsView project={project} rel="data/authors.json" showToast={vi.fn()} />);
+
+    fireEvent.click(await screen.findByTitle('Delete item'));
+    expect(await screen.findByText('This item is referenced elsewhere')).toBeInTheDocument();
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
+    expect(deleteButton).toBeDisabled();
+
+    fireEvent.click(screen.getByText('Remove anyway'));
+    await waitFor(() => expect(deleteButton).not.toBeDisabled());
+  });
+
+  it('deletes immediately when nothing references the item', async () => {
+    mockAvb({ files: { 'data/authors.json': [{ name: 'Ada' }] } });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<CmsView project={project} rel="data/authors.json" showToast={vi.fn()} />);
+    fireEvent.click(await screen.findByTitle('Delete item'));
+    await waitFor(() => expect(window.avb.writeCms).toHaveBeenCalled(), { timeout: 2000 });
+  });
+});
+
+describe('jumping to a referencing item', () => {
+  it('selects the item matching jumpItemId once it is loaded, then reports it handled', async () => {
+    mockAvb({
+      files: { 'data/authors.json': [{ _id: 'a1', name: 'Ada' }, { _id: 'a2', name: 'Grace' }] },
+    });
+    const onJumpHandled = vi.fn();
+    render(
+      <CmsView
+        project={project}
+        rel="data/authors.json"
+        showToast={vi.fn()}
+        jumpItemId="a2"
+        onJumpHandled={onJumpHandled}
+      />
+    );
+    // The title shows in the item list and again in the detail header once
+    // selected, so pick the list row specifically.
+    await waitFor(() => {
+      const row = screen
+        .getAllByText('Grace')
+        .map((el) => el.closest('.cms-item'))
+        .find(Boolean);
+      expect(row).toHaveClass('on');
+    });
+    expect(onJumpHandled).toHaveBeenCalled();
+  });
+
+  it('Show instance calls onJumpToItem with the referencing collection and item', async () => {
+    mockAvb({
+      files: {
+        'data/authors.json': [{ _id: 'a1', name: 'Ada' }],
+        'data/posts.json': [{ _id: 'p1', title: 'Hello', author: 'a1' }],
+      },
+      meta: { 'data/posts.json': { author: { type: 'reference', collection: 'data/authors.json' } } },
+    });
+    const onJumpToItem = vi.fn();
+    render(
+      <CmsView project={project} rel="data/authors.json" showToast={vi.fn()} onJumpToItem={onJumpToItem} />
+    );
+    fireEvent.click(await screen.findByTitle('Delete item'));
+    fireEvent.click(await screen.findByText('Show instance'));
+    expect(onJumpToItem).toHaveBeenCalledWith('data/posts.json', 'p1');
+  });
+});

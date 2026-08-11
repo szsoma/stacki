@@ -372,6 +372,7 @@ export default function App() {
   const [cmsRel, setCmsRel] = useState(null); // JSON file open in the CMS editor
   const [cmsTick, setCmsTick] = useState(0); // bumped on save, refreshes counts
   const [cmsSettings, setCmsSettings] = useState(false); // editing that collection's fields
+  const [cmsJump, setCmsJump] = useState(null); // { rel, itemId } — CmsView selects it once, then clears it
   const [inPreview, setInPreview] = useState(false); // interactive full-site preview
   const [previewSrc, setPreviewSrc] = useState(null);
   const [codeWin, setCodeWin] = useState(null); // {targetId|kind:'file', title, language}
@@ -2463,6 +2464,14 @@ export default function App() {
                 setCmsSettings(false);
               }}
               onClose={() => setCmsRel(null)}
+              jumpItemId={cmsJump && cmsJump.rel === cmsRel ? cmsJump.itemId : null}
+              onJumpHandled={() => setCmsJump(null)}
+              onJumpToItem={(jumpRel, itemId) => {
+                setCmsSettings(false);
+                setLeftTab('cms');
+                setCmsRel(jumpRel);
+                setCmsJump({ rel: jumpRel, itemId });
+              }}
             />
           )}
         </div>

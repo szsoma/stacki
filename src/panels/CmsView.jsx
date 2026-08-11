@@ -47,6 +47,8 @@ import {
   ensureIds,
 } from '../cmsSchema.js';
 import { ReferenceControl, MultiReferenceControl } from './CmsReferenceField.jsx';
+import { findIncomingReferences } from '../cmsReferences.js';
+import CmsDeleteGuard from './CmsDeleteGuard.jsx';
 
 const SAVE_DELAY = 400;
 
@@ -101,6 +103,9 @@ export default function CmsView({
   onCloseSettings,
   onDeleted,
   onClose,
+  jumpItemId,
+  onJumpHandled,
+  onJumpToItem,
 }) {
   const [collection, setCollection] = useState(null);
   const [items, setItems] = useState([]);
@@ -113,6 +118,7 @@ export default function CmsView({
   // Inference can't tell a phone number from a line of text, and an empty
   // field tells it nothing at all, so these are remembered on disk.
   const [declared, setDeclared] = useState({});
+  const [deleteGuard, setDeleteGuard] = useState(null); // { hits, files, onConfirm } while a blocked delete is open
 
   const saveTimer = useRef(null);
   const pending = useRef(null); // items waiting to be written
@@ -230,6 +236,19 @@ export default function CmsView({
     [items, declared]
   );
 
+  // "Show instance" (from a blocked delete elsewhere) asks to select a
+  // specific item once its collection has loaded. Only clears the request
+  // once the item is actually found — items may still belong to the
+  // previous collection for a render or two while the new one loads.
+  useEffect(() => {
+    if (!jumpItemId) return;
+    const index = items.findIndex((it) => isPlainObject(it) && it._id === jumpItemId);
+    if (index < 0) return;
+    setSel(index);
+    setQuery('');
+    onJumpHandled?.();
+  }, [jumpItemId, items, onJumpHandled]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items
@@ -258,11 +277,23 @@ export default function CmsView({
     setSel(sel + 1);
   };
 
-  const removeItem = () => {
-    if (!window.confirm(`Delete “${titleOf(item, sel)}”?`)) return;
+  const doRemoveItem = () => {
     const next = items.filter((_, i) => i !== sel);
     commit(next);
     setSel(Math.max(0, Math.min(sel, next.length - 1)));
+  };
+
+  const removeItem = async () => {
+    const targetId = isPlainObject(item) ? item._id : null;
+    const { hits, files } = targetId
+      ? await loadDeleteGuard(project.path, rel, [targetId])
+      : { hits: [], files: [] };
+    if (!hits.length) {
+      if (!window.confirm(`Delete “${titleOf(item, sel)}”?`)) return;
+      doRemoveItem();
+      return;
+    }
+    setDeleteGuard({ hits, files, onConfirm: doRemoveItem });
   };
 
   const move = (from, to) => {
@@ -534,6 +565,25 @@ export default function CmsView({
           )}
         </div>
       </div>
+
+      {deleteGuard && (
+        <CmsDeleteGuard
+          title="This item is referenced elsewhere"
+          message="Resolve every reference below before deleting it — repoint it by hand, or remove the reference on the spot."
+          hits={deleteGuard.hits}
+          files={deleteGuard.files}
+          projectPath={project.path}
+          onShowInstance={(hit) => {
+            setDeleteGuard(null);
+            onJumpToItem?.(hit.collectionRel, hit.itemId);
+          }}
+          onConfirm={() => {
+            deleteGuard.onConfirm();
+            setDeleteGuard(null);
+          }}
+          onCancel={() => setDeleteGuard(null)}
+        />
+      )}
     </div>
   );
 }
@@ -829,6 +879,39 @@ function bestType(collectionType, value) {
 // ---------------------------------------------------------------------------
 // Fields
 // ---------------------------------------------------------------------------
+
+// Computes the blocking list for a delete: every other item in the project
+// referencing the id(s) about to disappear, assigning any of those
+// referencing items their own hidden id if they don't have one yet — a "Show
+// instance" jump needs something stable to select.
+async function loadDeleteGuard(projectPath, targetRel, targetIds) {
+  if (!targetIds.length) return { hits: [], files: [] };
+  const [{ files }, { meta }] = await Promise.all([
+    window.avb.listCms(projectPath),
+    window.avb.cmsMeta(projectPath),
+  ]);
+  let hits = findIncomingReferences({ files, meta, targetRel, targetIds });
+  const relsNeedingIds = [...new Set(hits.filter((h) => !h.itemId).map((h) => h.collectionRel))];
+  for (const collectionRel of relsNeedingIds) {
+    const file = files.find((f) => f.rel === collectionRel);
+    const collection = collectionOf(file);
+    const { items: nextItems, changed } = ensureIds(collection.items);
+    if (changed) {
+      const data = reassemble(collection, nextItems);
+      await window.avb.writeCms({ projectPath, rel: collectionRel, data });
+      file.data = data;
+    }
+  }
+  if (relsNeedingIds.length) {
+    hits = hits.map((hit) => {
+      if (hit.itemId) return hit;
+      const file = files.find((f) => f.rel === hit.collectionRel);
+      const collection = collectionOf(file);
+      return { ...hit, itemId: collection.items[hit.itemIndex]?._id || null };
+    });
+  }
+  return { hits, files };
+}
 
 function FieldRow({
   label,
