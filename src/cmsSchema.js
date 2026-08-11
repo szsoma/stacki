@@ -10,6 +10,26 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
+// A short id stable enough to link items across collections. Not
+// cryptographically unique — collision odds within one project's item count
+// are negligible, and it's never shown to the user.
+export function genId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+// Gives every plain-object item a permanent `_id` if it doesn't have one yet.
+// Reference fields link to this rather than to an item's position, which
+// changes as items are reordered, added, or removed.
+export function ensureIds(items) {
+  let changed = false;
+  const next = items.map((item) => {
+    if (!isPlainObject(item) || item._id) return item;
+    changed = true;
+    return { ...item, _id: genId() };
+  });
+  return { items: next, changed };
+}
+
 // Field types, most specific first. When items disagree about a field (one has
 // a short string, another a paragraph) the earlier type wins.
 const TYPE_RANK = [
@@ -112,6 +132,7 @@ export function fieldsOf(items) {
   for (const item of items) {
     if (!isPlainObject(item)) continue;
     for (const [key, value] of Object.entries(item)) {
+      if (key === '_id') continue;
       if (!types.has(key)) {
         order.push(key);
         types.set(key, inferType(value));
@@ -140,7 +161,8 @@ export function titleOf(item, index) {
     const v = item[key];
     if (typeof v === 'string' && v.trim()) return v.trim();
   }
-  for (const v of Object.values(item)) {
+  for (const [key, v] of Object.entries(item)) {
+    if (key === '_id') continue;
     if (typeof v === 'string' && v.trim() && v.length <= 60) return v.trim();
   }
   return `Item ${index + 1}`;
@@ -205,6 +227,7 @@ export function emptyValueFor(type) {
 export function duplicateItem(item) {
   const copy = JSON.parse(JSON.stringify(item));
   if (isPlainObject(copy)) {
+    if (copy._id) copy._id = genId();
     for (const key of ['slug', 'id']) {
       if (typeof copy[key] === 'string' && copy[key]) copy[key] = `${copy[key]}-copy`;
     }
