@@ -884,15 +884,23 @@ function FieldSchema({ items, declared, path, ...ops }) {
 const STRUCTURAL = ['object', 'objects', 'list', 'boolean', 'number'];
 
 function withDeclaredTypes(fields, declared, path) {
-  if (!declared) return fields;
+  if (!declared) {
+    return fields.map((f) => ({ ...f, required: false, description: null }));
+  }
   return fields.map((field) => {
-    const chosen = declared[[...path, field.key].join('.')];
-    if (!chosen) return field;
-    const chosenType = typeof chosen === 'object' ? chosen.type : chosen;
-    const refCollection = typeof chosen === 'object' ? chosen.collection : undefined;
+    const dotted = [...path, field.key].join('.');
+    const entry = declared[dotted];
+    if (!entry) return { ...field, required: false, description: null };
+
+    const entryObj = typeof entry === 'object' ? entry : { type: entry };
+    const chosenType = entryObj.type || field.type;
     const forces = chosenType === 'reference' || chosenType === 'multiReference';
-    if (!forces && STRUCTURAL.includes(field.type)) return field;
-    return { ...field, type: chosenType, refCollection };
+    const type = (!forces && STRUCTURAL.includes(field.type)) ? field.type : chosenType;
+    const refCollection = entryObj.collection || undefined;
+    const required = entryObj.required === true;
+    const description = entryObj.description || null;
+
+    return { ...field, type, refCollection, required, description };
   });
 }
 
