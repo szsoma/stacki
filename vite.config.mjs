@@ -16,5 +16,12 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.js',
     clearMocks: true,
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.worktrees/**',
+      '**/.claude/**',
+      '**/.superpowers/**',
+    ],
   },
 });

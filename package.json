@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:electron": "node --check electron/main.js && node --check electron/preload.js && node --check electron/mainPolicy.js && node --check electron/terminalManager.js && node --check electron/terminalIpc.js && node --check electron/contextFiles.js && node --check electron/contextIpc.js",
+    "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/install-app-deps.cjs"
   },
   "dependencies": {
@@ -48,6 +49,7 @@
     "electron-builder": "^25.1.8",
     "jsdom": "^26.1.0",
     "terser": "^5.49.0",
+    "typescript": "^5.9.3",
     "vite": "^6.0.3",
     "vitest": "^3.2.4",
     "wait-on": "^8.0.1"
