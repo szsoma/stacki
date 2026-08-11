@@ -12,6 +12,7 @@ export interface PreviewSlice {
   setDevUrl: (url: string | null) => void;
   setDevStatus: (status: PreviewSlice['devStatus']) => void;
   appendDevLog: (chunk: string) => void;
+  setDevLog: (log: string) => void;
   setDevDiag: (d: unknown) => void;
   refresh: () => void;
   setDevice: (d: PreviewSlice['device']) => void;
@@ -41,6 +42,7 @@ export const createPreviewSlice: StateCreator<PreviewSlice, [], [], PreviewSlice
       }
       return { devLog: next };
     }),
+  setDevLog: (devLog) => set({ devLog }),
   setDevDiag: (devDiag) => set({ devDiag }),
   refresh: () => set((s) => ({ refreshKey: s.refreshKey + 1 })),
   setDevice: (device) => set({ device }),
