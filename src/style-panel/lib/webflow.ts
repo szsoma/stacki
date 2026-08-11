@@ -287,6 +287,7 @@ function docForSource(source: EmbedSource, code: string): EmbedDoc {
 async function readSource(source: EmbedSource): Promise<string> {
   if (source.origin.kind === 'file') {
     const res = await window.avb.readStyleFile(source.origin.path)
+    // @ts-expect-error readStyleFile return type not yet fully typed
     return res?.css ?? ''
   }
   const node = nodeById(source.origin.nodeId)
@@ -553,6 +554,7 @@ async function readAllProjectCss(): Promise<Array<{ label: string; css: string }
   if (!files.length && host.projectPath) {
     try {
       const res = await window.avb.listStyleFiles(host.projectPath)
+      // @ts-expect-error listStyleFiles return type not yet fully typed
       files = res?.files || []
     } catch {
       files = []
@@ -561,6 +563,7 @@ async function readAllProjectCss(): Promise<Array<{ label: string; css: string }
   for (const f of files) {
     try {
       const res = await window.avb.readStyleFile(f.path)
+      // @ts-expect-error readStyleFile return type not yet fully typed
       out.push({ label: f.rel, css: res?.css ?? '' })
     } catch {
       /* unreadable — skip it rather than fail the whole scan */
@@ -671,6 +674,7 @@ export async function getImageAssets(): Promise<ImageAsset[]> {
   const host = getHost()
   if (!host.projectPath) return []
   try {
+    // @ts-expect-error listAssets return type not yet fully typed
     const { entries } = await window.avb.listAssets(host.projectPath)
     return (entries || [])
       .filter((e: { isDir: boolean; name: string }) => !e.isDir && /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(e.name))

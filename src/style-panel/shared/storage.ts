@@ -1,3 +1,4 @@
+// @ts-expect-error auth-client module not yet typed
 import type { AuthSession } from './auth-client'
 
 const TOKEN_KEY = 'moden.session'

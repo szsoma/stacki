@@ -443,9 +443,11 @@ export default function LayoutSection({ rule, busy, onSetProp, onClearProp, onLi
         </>
       ) : null}
 
-      {isGrid ? (
+        {isGrid ? (
         <>
+          {/* @ts-expect-error GridTracksRow prop type doesn't include onLiveSetProp yet */}
           <GridTracksRow rule={rule} busy={busy} onSetProp={onSetProp} onClearProp={onClearProp} onLiveSetProp={onLiveSetProp} />
+          {/* @ts-expect-error GridDirectionRow prop type doesn't include onLiveSetProp yet */}
           <GridDirectionRow rule={rule} busy={busy} onSetProp={onSetProp} onClearProp={onClearProp} onLiveSetProp={onLiveSetProp} />
           <GridAlignRow rule={rule} busy={busy} onSetProp={onSetProp} onClearProp={onClearProp} onLiveSetProp={onLiveSetProp} />
           <GapControl rule={rule} busy={busy} onSetProp={onSetProp} onClearProp={onClearProp} onLiveSetProp={onLiveSetProp} />

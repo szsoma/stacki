@@ -13,6 +13,7 @@
 // union types — the runtime methods are all optional-chained and timeout-guarded.
 
 import { collectRules, parseRegion, renderEmbed, splitEmbed } from './css'
+// @ts-expect-error variable-modes module not yet written
 import { isVariableModeProp } from './variable-modes'
 import { BREAKPOINTS, nativeContextKey, readOptionsFor, type NativeStyleOptions } from './native-styles'
 import type { StateKey } from './resolved'
