@@ -560,6 +560,23 @@ export default function CmsView({
           {item && isPlainObject(item) && (
             <div className="cms-card">
               <h3>{single ? collection.label : 'Basic info'}</h3>
+              {(() => {
+                const emptyRequired = fields
+                  .filter((f) => f.required)
+                  .filter((f) => {
+                    const v = item[f.key];
+                    return v === null || v === undefined || v === '' ||
+                      (Array.isArray(v) && v.length === 0);
+                  })
+                  .map((f) => f.label);
+
+                return emptyRequired.length > 0 ? (
+                  <div className="cms-required-warning">
+                    Missing required {emptyRequired.length === 1 ? 'field' : 'fields'}:{' '}
+                    {emptyRequired.join(', ')}
+                  </div>
+                ) : null;
+              })()}
               {fields.map((field) => (
                 <FieldRow
                   key={field.key}
