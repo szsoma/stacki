@@ -103,6 +103,45 @@ describe('useTerminalContext', () => {
     await waitFor(() => expect(result.current.chips[0].data).toEqual({ value: 'second' }));
   });
 
+  it('keeps the newest refresh result when an older resolve finishes later', async () => {
+    const older = deferred();
+    const newer = deferred();
+    const resolve = vi
+      .fn()
+      .mockResolvedValueOnce({ data: { value: 'initial' }, estimatedCharacters: 1, sourceRevision: 'r1' })
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    registerResolver(fakeResolver({ resolve }));
+    const { result } = renderHook(() => useTerminalContext({ currentFile: null, projectPath: null }));
+
+    let id;
+    act(() => {
+      id = result.current.addChip('fake-a');
+    });
+    await waitFor(() => expect(result.current.chips[0].data).toEqual({ value: 'initial' }));
+
+    act(() => {
+      result.current.refreshChip(id);
+    });
+    act(() => {
+      result.current.refreshChip(id);
+    });
+
+    await act(async () => {
+      newer.resolve({ data: { value: 'newer' }, estimatedCharacters: 1, sourceRevision: 'r3' });
+      await newer.promise;
+    });
+    expect(result.current.chips[0].data).toEqual({ value: 'newer' });
+    expect(result.current.chips[0].sourceRevision).toBe('r3');
+
+    await act(async () => {
+      older.resolve({ data: { value: 'older' }, estimatedCharacters: 1, sourceRevision: 'r2' });
+      await older.promise;
+    });
+    expect(result.current.chips[0].data).toEqual({ value: 'newer' });
+    expect(result.current.chips[0].sourceRevision).toBe('r3');
+  });
+
   it('marks a ready chip stale when its resolver-reported key changes', async () => {
     registerResolver(
       fakeResolver({

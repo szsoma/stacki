@@ -15,9 +15,12 @@ export function useTerminalContext(appState) {
   const [chips, setChips] = useState([]);
   const [prompt, setPrompt] = useState('');
   const appStateRef = useRef(appState);
+  const resolveGenerationsRef = useRef(new Map());
   appStateRef.current = appState;
 
   const resolveChip = useCallback(async (id, type, options) => {
+    const generation = (resolveGenerationsRef.current.get(id) ?? 0) + 1;
+    resolveGenerationsRef.current.set(id, generation);
     const resolver = getResolver(type);
     try {
       // Capture appStateRef.current ONCE, before the await, and reuse that
@@ -34,13 +37,17 @@ export function useTerminalContext(appState) {
       const result = await resolver.resolve(state, options);
       const staleKey = resolver.computeStaleKey ? resolver.computeStaleKey(state) : null;
       setChips((current) =>
-        current.map((chip) =>
-          chip.id === id ? { ...withReady(chip, result), staleKey } : chip,
-        ),
+        resolveGenerationsRef.current.get(id) === generation
+          ? current.map((chip) =>
+              chip.id === id ? { ...withReady(chip, result), staleKey } : chip,
+            )
+          : current,
       );
     } catch (error) {
       setChips((current) =>
-        current.map((chip) => (chip.id === id ? withError(chip, error) : chip)),
+        resolveGenerationsRef.current.get(id) === generation
+          ? current.map((chip) => (chip.id === id ? withError(chip, error) : chip))
+          : current,
       );
     }
   }, []);
@@ -59,6 +66,7 @@ export function useTerminalContext(appState) {
   );
 
   const removeChip = useCallback((id) => {
+    resolveGenerationsRef.current.delete(id);
     setChips((current) => current.filter((chip) => chip.id !== id));
   }, []);
 
