@@ -4,6 +4,37 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ContextChipBar from './ContextChipBar.jsx';
 
+const sectionDefinition = {
+  name: 'Section',
+  path: '/projects/site/src/components/Section.astro',
+};
+
+function selectedParagraph(id, text) {
+  return {
+    id,
+    kind: 'element',
+    name: 'p',
+    props: {},
+    children: [{ id: `${id}-text`, kind: 'text', value: text }],
+  };
+}
+
+function sectionEditorContext(selectedNode) {
+  return {
+    selectedNode,
+    nodeTree: [
+      {
+        id: 'section',
+        kind: 'component',
+        name: 'Section',
+        props: {},
+        children: [selectedNode],
+      },
+    ],
+    componentDefinitions: [sectionDefinition],
+  };
+}
+
 beforeEach(() => {
   window.avb = {
     listContextFiles: vi.fn(async () => ({ files: ['src/pages/index.astro'] })),
@@ -160,6 +191,68 @@ describe('ContextChipBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Insert into terminal' }));
     expect(listener.mock.calls[0][0].detail.text).toContain('<h1></h1>');
     window.removeEventListener('stacki:terminal-menu', listener);
+  });
+
+  it('auto-attaches the exact selected paragraph while active and refreshes the same chip when selection changes', async () => {
+    const firstParagraph = selectedParagraph('paragraph-one', 'First selected paragraph.');
+    const secondParagraph = selectedParagraph('paragraph-two', 'Second selected paragraph.');
+    window.avb.serializeNode = vi.fn(async ({ node }) => ({
+      markup: `<p>${node.children[0].value}</p>`,
+    }));
+
+    const { rerender } = render(
+      <ContextChipBar
+        active
+        currentFile={null}
+        projectPath="/projects/site"
+        editorContext={sectionEditorContext(firstParagraph)}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByText('Selected element')).toHaveLength(1));
+    expect(window.avb.serializeNode).toHaveBeenCalledWith({ node: firstParagraph });
+    expect(screen.queryByText('Preview element')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText('Ask Codex to…'), { target: { value: 'Adjust this copy.' } });
+    const listener = vi.fn();
+    window.addEventListener('stacki:terminal-menu', listener);
+    fireEvent.click(screen.getByRole('button', { name: 'Insert into terminal' }));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0].detail.text).toContain('<p>First selected paragraph.</p>');
+    expect(listener.mock.calls[0][0].detail.text).toContain('src/components/Section.astro');
+    expect(listener.mock.calls[0][0].detail.text).not.toContain('content of src/components/Section.astro');
+    expect(window.avb.readContextFile).not.toHaveBeenCalled();
+    window.removeEventListener('stacki:terminal-menu', listener);
+
+    rerender(
+      <ContextChipBar
+        active
+        currentFile={null}
+        projectPath="/projects/site"
+        editorContext={sectionEditorContext(secondParagraph)}
+      />,
+    );
+
+    await waitFor(() => expect(window.avb.serializeNode).toHaveBeenCalledWith({ node: secondParagraph }));
+    expect(screen.getAllByText('Selected element')).toHaveLength(1);
+    fireEvent.click(screen.getByText('Selected element'));
+    expect(await screen.findByText(/<p>Second selected paragraph\.<\/p>/)).toBeInTheDocument();
+    expect(screen.queryByText(/<p>First selected paragraph\.<\/p>/)).not.toBeInTheDocument();
+  });
+
+  it('does not auto-attach or serialize a selected element while inactive', async () => {
+    const paragraph = selectedParagraph('inactive-paragraph', 'Do not attach me.');
+    render(
+      <ContextChipBar
+        active={false}
+        currentFile={null}
+        projectPath="/projects/site"
+        editorContext={sectionEditorContext(paragraph)}
+      />,
+    );
+
+    await waitFor(() => expect(window.avb.serializeNode).not.toHaveBeenCalled());
+    expect(document.querySelector('.context-chip-label')).not.toBeInTheDocument();
   });
 
   it('offers Console errors only when the dev log has captured problems', () => {

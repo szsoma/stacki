@@ -1,5 +1,5 @@
 // @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ContextChip from './ContextChip.jsx';
 import ContextPicker from './ContextPicker.jsx';
 import ContextDetailsPopover from './ContextDetailsPopover.jsx';
@@ -40,6 +40,7 @@ export default function ContextChipBar({
   devLog = '',
   devUrl = null,
   getPreviewRect = null,
+  active = false,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [detailsId, setDetailsId] = useState(null);
@@ -72,6 +73,19 @@ export default function ContextChipBar({
     composedMarkdown,
     insertIntoTerminal,
   } = useTerminalContext(appState);
+
+  useEffect(() => {
+    const selectedNode = appState.selectedNode;
+    if (!active || !selectedNode) return;
+
+    const existing = chips.find((c) => c.type === 'selected-element');
+    if (existing) {
+      refreshChip(existing.id);
+      return;
+    }
+
+    addChip('selected-element');
+  }, [appState.selectedNode, active]);
 
   const availableResolvers = listResolvers().filter((resolver) => resolver.isAvailable(appState));
 

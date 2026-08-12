@@ -487,6 +487,7 @@ export default function TerminalPanel({ active, currentFile, projectPath, editor
         devLog={devLog}
         devUrl={devUrl}
         getPreviewRect={getPreviewRect}
+        active={active}
       />
       <div className="terminal-surface" ref={hostRef} />
       <div
