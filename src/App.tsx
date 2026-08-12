@@ -488,7 +488,7 @@ export default function App() {
     } else {
       const next = result.pages[0] || null;
       if (next) {
-        const entry = { ...next, kind: 'page' };
+        const entry: PageEntry = { ...next, kind: 'page' };
         let fresh;
         try {
           fresh = await window.avb.readPage(entry.path);

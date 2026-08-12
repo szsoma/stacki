@@ -21,6 +21,13 @@ function expectDirty(store: ReturnType<typeof createAppStore>) {
   expect(store.getState().pageState?.dirty).toBe(true);
 }
 
+function writtenIdValue(call: unknown): string | undefined {
+  const payload = call as { model?: PageModel } | undefined;
+  const node = payload?.model?.nodes[0];
+  const prop = node?.props?.id;
+  return prop?.type === 'string' ? prop.value : undefined;
+}
+
 describe('historySlice', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -79,10 +86,10 @@ describe('historySlice', () => {
 
     store.getState().undo();
     await vi.advanceTimersByTimeAsync(300);
-    expect(vi.mocked(window.avb.writePage).mock.calls[0][0].model.nodes[0].props.id.value).toBe('a');
+    expect(writtenIdValue(vi.mocked(window.avb.writePage).mock.calls[0]?.[0])).toBe('a');
     store.getState().redo();
     await vi.advanceTimersByTimeAsync(300);
-    expect(vi.mocked(window.avb.writePage).mock.calls[1][0].model.nodes[0].props.id.value).toBe('b');
+    expect(writtenIdValue(vi.mocked(window.avb.writePage).mock.calls[1]?.[0])).toBe('b');
   });
 
   it('caps past at 100 entries, dropping the oldest', () => {
