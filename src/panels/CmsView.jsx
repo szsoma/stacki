@@ -370,6 +370,29 @@ export default function CmsView({
     commit(applyToItems(items, path, orderKeys(keys)));
   };
 
+  const toggleRequired = (path, key, value) => {
+    const dotted = [...path, key].join('.');
+    const existing = declared[dotted];
+    const inferredType = fieldsAt(items, path).find((f) => f.key === key)?.type || 'text';
+    const entry = existing
+      ? (typeof existing === 'object' ? existing : { type: existing })
+      : { type: inferredType };
+    saveDeclared({ ...declared, [dotted]: { ...entry, required: value } });
+  };
+
+  const setDescription = (path, key, description) => {
+    const dotted = [...path, key].join('.');
+    const existing = declared[dotted];
+    const inferredType = fieldsAt(items, path).find((f) => f.key === key)?.type || 'text';
+    const entry = existing
+      ? (typeof existing === 'object' ? existing : { type: existing })
+      : { type: inferredType };
+    saveDeclared({
+      ...declared,
+      [dotted]: { ...entry, description: description || null },
+    });
+  };
+
   if (settings) {
     return (
       <div className={`cms-view ${hidden ? 'hidden' : ''}`}>
@@ -385,6 +408,8 @@ export default function CmsView({
           onRenameField={renameFieldAt}
           onRemoveField={removeFieldAt}
           onReorderFields={reorderFieldsAt}
+          onToggleRequired={toggleRequired}
+          onSetDescription={setDescription}
           onJumpToItem={onJumpToItem}
           onDone={onCloseSettings}
         />
@@ -536,6 +561,23 @@ export default function CmsView({
           {item && isPlainObject(item) && (
             <div className="cms-card">
               <h3>{single ? collection.label : 'Basic info'}</h3>
+              {(() => {
+                const emptyRequired = fields
+                  .filter((f) => f.required)
+                  .filter((f) => {
+                    const v = item[f.key];
+                    return v === null || v === undefined || v === '' ||
+                      (Array.isArray(v) && v.length === 0);
+                  })
+                  .map((f) => f.label);
+
+                return emptyRequired.length > 0 ? (
+                  <div className="cms-required-warning">
+                    Missing required {emptyRequired.length === 1 ? 'field' : 'fields'}:{' '}
+                    {emptyRequired.join(', ')}
+                  </div>
+                ) : null;
+              })()}
               {fields.map((field) => (
                 <FieldRow
                   key={field.key}
@@ -605,6 +647,8 @@ function CmsSettings({
   onRenameField,
   onRemoveField,
   onReorderFields,
+  onToggleRequired,
+  onSetDescription,
   onJumpToItem,
   onDone,
 }) {
@@ -653,6 +697,8 @@ function CmsSettings({
             onRenameField={onRenameField}
             onRemoveField={onRemoveField}
             onReorderFields={onReorderFields}
+            onToggleRequired={onToggleRequired}
+            onSetDescription={onSetDescription}
           />
         </div>
 
@@ -743,6 +789,7 @@ function FieldSchema({ items, declared, path, ...ops }) {
   const dragFrom = useRef(null);
   // A nested level's fields must not answer a drag from the level above it.
   const dragType = `avb/cms-field-${path.join('.') || 'root'}`;
+  const [descFocus, setDescFocus] = useState(null);
 
   const drop = (source, target) => {
     if (!source || !target || source === target) return;
@@ -760,6 +807,7 @@ function FieldSchema({ items, declared, path, ...ops }) {
         const open = expanded.has(field.key);
         const info = typeInfo(field.type === 'empty' ? 'text' : field.type);
         const Icon = info.Icon;
+        const dotted = [...path, field.key].join('.');
         return (
           <div key={field.key} className="cms-schema-group">
             <div
@@ -812,31 +860,62 @@ function FieldSchema({ items, declared, path, ...ops }) {
               ) : (
                 <span className="cms-schema-expand" />
               )}
-              <input
-                key={field.key}
-                className="cms-schema-name"
-                defaultValue={field.label}
-                spellCheck={false}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') e.currentTarget.blur();
-                  if (e.key === 'Escape') {
-                    e.currentTarget.value = field.label;
-                    e.currentTarget.blur();
-                  }
-                }}
-                onBlur={(e) => {
-                  const next = keyFor(e.target.value);
-                  if (!next || !ops.onRenameField(path, field.key, next)) {
-                    e.target.value = field.label;
-                  }
-                }}
-              />
-              <span className="cms-schema-type" title="A field's type is set when it's created">
-                <Icon size={13} />
-                {info.label}
-                {field.refCollection &&
-                  ` → ${ops.collections?.find((c) => c.rel === field.refCollection)?.label || field.refCollection}`}
-              </span>
+              <div className="cms-schema-field-info">
+                <div className="cms-schema-field-row">
+                  <input
+                    key={field.key}
+                    className="cms-schema-name"
+                    defaultValue={field.label}
+                    spellCheck={false}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur();
+                      if (e.key === 'Escape') {
+                        e.currentTarget.value = field.label;
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const next = keyFor(e.target.value);
+                      if (!next || !ops.onRenameField(path, field.key, next)) {
+                        e.target.value = field.label;
+                      }
+                    }}
+                  />
+                  <span className="cms-schema-type" title="A field's type is set when it's created">
+                    <Icon size={13} />
+                    {info.label}
+                    {field.refCollection &&
+                      ` → ${ops.collections?.find((c) => c.rel === field.refCollection)?.label || field.refCollection}`}
+                  </span>
+                  <label className="cms-schema-required" title="Warn when empty on save">
+                    <input
+                      type="checkbox"
+                      checked={field.required || false}
+                      onChange={() => ops.onToggleRequired(path, field.key, !field.required)}
+                    />
+                    Required
+                  </label>
+                </div>
+                {field.description || descFocus === dotted ? (
+                  <div className="cms-schema-description">
+                    <input
+                      type="text"
+                      value={field.description || ''}
+                      placeholder="Help text shown when editing"
+                      onFocus={() => setDescFocus(dotted)}
+                      onBlur={() => { if (!field.description) setDescFocus(null); }}
+                      onChange={(e) => ops.onSetDescription(path, field.key, e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    className="ghost cms-schema-add-desc"
+                    onClick={() => setDescFocus(dotted)}
+                  >
+                    + Add description
+                  </button>
+                )}
+              </div>
               <button
                 className="ghost danger"
                 title="Delete field"
@@ -885,15 +964,23 @@ function FieldSchema({ items, declared, path, ...ops }) {
 const STRUCTURAL = ['object', 'objects', 'list', 'boolean', 'number'];
 
 function withDeclaredTypes(fields, declared, path) {
-  if (!declared) return fields;
+  if (!declared) {
+    return fields.map((f) => ({ ...f, required: false, description: null }));
+  }
   return fields.map((field) => {
-    const chosen = declared[[...path, field.key].join('.')];
-    if (!chosen) return field;
-    const chosenType = typeof chosen === 'object' ? chosen.type : chosen;
-    const refCollection = typeof chosen === 'object' ? chosen.collection : undefined;
+    const dotted = [...path, field.key].join('.');
+    const entry = declared[dotted];
+    if (!entry) return { ...field, required: false, description: null };
+
+    const entryObj = typeof entry === 'object' ? entry : { type: entry };
+    const chosenType = entryObj.type || field.type;
     const forces = chosenType === 'reference' || chosenType === 'multiReference';
-    if (!forces && STRUCTURAL.includes(field.type)) return field;
-    return { ...field, type: chosenType, refCollection };
+    const type = (!forces && STRUCTURAL.includes(field.type)) ? field.type : chosenType;
+    const refCollection = entryObj.collection || undefined;
+    const required = entryObj.required === true;
+    const description = entryObj.description || null;
+
+    return { ...field, type, refCollection, required, description };
   });
 }
 
