@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import { describe, expect, it } from 'vitest';
 import { scanForSecrets } from './secretScan.js';
 

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 export const SUGGESTED_THRESHOLD = 3;
 
 const PRIORITY = Object.freeze({

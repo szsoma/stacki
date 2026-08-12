@@ -15,6 +15,7 @@ const PATTERNS = [
   },
 ];
 
+/** @param {string} text */
 export function scanForSecrets(text) {
   if (!text) return [];
   const hits = [];

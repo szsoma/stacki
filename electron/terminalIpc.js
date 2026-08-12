@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 const ACCESS_DENIED_MESSAGE = 'Terminal IPC is available only to Stacki.';
 const FALLBACK_ERROR_MESSAGE = 'Terminal operation failed.';
 

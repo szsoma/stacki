@@ -1,5 +1,6 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useState } from 'react';
-import { cleanError } from '../App.jsx';
+import { cleanError } from '../App';
 import { LayersIcon, CloseIcon } from '../ui/Icons.jsx';
 import StackiLogo from '../ui/StackiLogo.jsx';
 import WelcomeBackground from '../ui/WelcomeBackground.jsx';

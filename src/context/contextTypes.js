@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 export const CONTEXT_CHIP_TYPES = Object.freeze({
   CURRENT_FILE: 'current-file',
   SELECTED_FILES: 'selected-files',

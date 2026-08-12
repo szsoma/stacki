@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Dropdown from './Dropdown.jsx';
 import AssetField from './AssetField.jsx';
@@ -41,6 +42,20 @@ function parseMailto(str) {
   return { email: m[1] || '', subject };
 }
 
+/**
+ * @param {{
+ *   value?: import('../types/ast').PropValue,
+ *   context: {
+ *     pages?: { name: string, route?: string }[],
+ *     sectionIds?: string[],
+ *     projectPath?: string,
+ *   },
+ *   onChange: (
+ *     value: import('../types/ast').PropValue | undefined,
+ *     immediate?: boolean,
+ *   ) => void,
+ * }} props
+ */
 export default function LinkField({ value, context, onChange }) {
   const str = value && value.type === 'string' ? value.value : '';
   const [type, setType] = useState(() => detectType(str, context.pages));

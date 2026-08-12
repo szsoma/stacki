@@ -1,11 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
-import EmbedEditor from '../style-panel/EmbedEditor.tsx';
-import { setHost } from '../style-panel/lib/host.ts';
+import { useEffect, useRef, useState } from 'react';
+import EmbedEditor from '../style-panel/EmbedEditor';
+import { setHost } from '../style-panel/lib/host';
 // The panel's stylesheet is written against moden's design tokens, so they
 // come with it.
 import '../style-panel/tokens.css';
 import '../style-panel/utilities.css';
 import '../style-panel/embed-editor.css';
+import { useAppStore } from '../store/index';
+import { selectModel, selectSelectedNode } from '../store/selectors';
 
 // Host for the style panel.
 //
@@ -17,15 +19,21 @@ import '../style-panel/embed-editor.css';
 // Choosing which of those to author into is the panel's own "Add custom styles
 // in:" control — the same one it has always had, now listing project sources.
 
+interface StylePanelProps {
+  onWriteStyleNode?: (nodeId: string, css: string, immediate?: boolean) => void;
+  onSelectNode?: (id: string) => void;
+}
+
 export default function StylePanel({
-  project,
-  model,
-  node,
-  device,
   onWriteStyleNode,
   onSelectNode,
-}) {
-  const [files, setFiles] = useState([]);
+}: StylePanelProps) {
+  const project = useAppStore((s) => s.project);
+  const model = useAppStore(selectModel);
+  const node = useAppStore(selectSelectedNode);
+  const device = useAppStore((s) => s.device);
+
+  const [files, setFiles] = useState<any[]>([]);
 
   useEffect(() => {
     let live = true;
@@ -69,7 +77,7 @@ export default function StylePanel({
   // to <body> and were written for moden, where the panel filled the window —
   // so their backdrop spans the viewport and the sheets size to it. Publish
   // this panel's box so they can be bound to it instead; see styles.css.
-  const hostRef = useRef(null);
+  const hostRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return undefined;

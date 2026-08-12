@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useState } from 'react';
 import CodeEditor from './CodeEditor.jsx';
 import { CloseIcon, CodeIcon } from './Icons.jsx';

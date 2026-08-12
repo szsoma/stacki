@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useMemo, useState } from 'react';
 import { ElementImageIcon } from './Icons.jsx';
 import AssetThumb from './AssetThumb.jsx';
@@ -20,6 +21,17 @@ const isExternal = (v) => /^(https?:)?\/\//.test(v) || v.startsWith('data:');
 // their own type control (the href link editor), where it would both
 // duplicate that control and overlap it — the toggle is positioned to sit
 // beside a field label, which those hosts don't have directly above.
+/**
+ * @param {{
+ *   value?: string,
+ *   onChange: (value: string, immediate?: boolean) => void,
+ *   mediaKind?: string,
+ *   projectPath?: string,
+ *   showModeToggle?: boolean,
+ *   initialMode?: 'asset' | 'url',
+ *   plainLabel?: string,
+ * }} props
+ */
 export default function AssetField({
   value,
   onChange,

@@ -1,5 +1,6 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef, useState } from 'react';
-import { cleanError } from '../App.jsx';
+import { cleanError } from '../App';
 import { BranchIcon, CheckIcon, ExternalIcon, CloseIcon } from '../ui/Icons.jsx';
 
 // owner/repo out of any GitHub remote form (https or ssh), for display.

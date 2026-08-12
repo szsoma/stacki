@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import { CONTEXT_CHIP_TYPES } from './contextTypes.js';
 import { findOwningComponent } from './nodeTree.js';
 import { toProjectRelativePath } from './projectPaths.js';

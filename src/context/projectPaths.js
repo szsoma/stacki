@@ -2,6 +2,10 @@
 // electron/main.js's listAstroFiles walks with path.join from an absolute
 // project root) into the project-relative form every resolver's data uses.
 // Mirrors the private toProjectRelativePath in src/App.jsx:341-349.
+/**
+ * @param {string | null | undefined} root
+ * @param {string | null | undefined} absolutePath
+ */
 export function toProjectRelativePath(root, absolutePath) {
   if (!absolutePath) return null;
   if (!root) return absolutePath;

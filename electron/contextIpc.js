@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 const contextFiles = require('./contextFiles');
 const astroParser = require('./astroParser');
 

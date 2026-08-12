@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 // Pure helpers over the visual-editor node tree (model.nodes), shared by the
 // Selected Element and Current Page resolvers. src/App.jsx has its own
 // private, unexported copies of the same tree walks — these are separate,

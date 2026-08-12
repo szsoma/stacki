@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React from 'react';
 
 // Minimal stroke-based icon set on a 16px grid, Framer-style.

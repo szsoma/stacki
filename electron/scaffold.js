@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const FILES = {
+  /** @param {string} name */
   'package.json': (name) =>
     JSON.stringify(
       {
@@ -159,6 +160,10 @@ import Footer from '../components/Footer.astro';
 `,
 };
 
+/**
+ * @param {string} dir
+ * @param {string} [name]
+ */
 function scaffoldProject(dir, name) {
   const safeName = (name || path.basename(dir))
     .toLowerCase()

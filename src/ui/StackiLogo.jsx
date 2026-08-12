@@ -1,6 +1,9 @@
 import React from 'react';
 
 // Stacki wordmark. Scales by width; `currentColor` so it inherits text color.
+/**
+ * @param {{ width?: number, className?: string, style?: React.CSSProperties }} props
+ */
 export default function StackiLogo({ width = 260, className, style }) {
   return (
     <svg

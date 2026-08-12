@@ -1,9 +1,17 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useLayoutEffect, useRef, useState } from 'react';
 
 // Token editor for class-list props: each class renders as a tag, a text
 // caret can sit between any two tags (click a tag to place the caret after
 // it, Backspace removes the tag before the caret), and typing filters a
 // suggestion list of every class used across the project.
+/**
+ * @param {{
+ *   value?: string,
+ *   suggestions?: string[],
+ *   onChange: (value: string, immediate?: boolean) => void,
+ * }} props
+ */
 export default function ClassInput({ value, suggestions = [], onChange }) {
   const tokens = String(value || '').trim().split(/\s+/).filter(Boolean);
   const [caret, setCaret] = useState(tokens.length);

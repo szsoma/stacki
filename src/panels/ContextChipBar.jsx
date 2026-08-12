@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useCallback, useMemo, useState } from 'react';
 import ContextChip from './ContextChip.jsx';
 import ContextPicker from './ContextPicker.jsx';

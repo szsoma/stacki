@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 // Turns the JSON files under src/ into something a CMS can show: a collection
 // of items, each with typed fields. Nothing here is configured — the shape is
 // inferred from the data that's already in the file, so a designer can edit

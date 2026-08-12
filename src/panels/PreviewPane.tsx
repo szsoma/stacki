@@ -15,10 +15,20 @@ import {
   CustomElementIcon,
   elementIcon,
 } from '../ui/Icons.jsx';
+import { useAppStore } from '../store/index';
 
 // The overlay label wears the same icon the Navigator row does, so a node
 // looks the same wherever you meet it.
-function outlineIcon(info) {
+interface OutlineInfo {
+  label: string;
+  kind: string;
+  tag: string | null;
+  nodeKind: string;
+  isLayout: boolean;
+  bound: boolean;
+}
+
+function outlineIcon(info: OutlineInfo) {
   const size = 11;
   if (info.isLayout) return <LayoutIcon size={size} />;
   if (info.nodeKind === 'component') return <ElementComponentIcon size={size} />;
@@ -37,23 +47,43 @@ function outlineIcon(info) {
   }
 }
 
+interface DeviceInfo {
+  key: string;
+  Icon: React.ComponentType<{ size: number }>;
+  title: string;
+  width: number | null;
+}
+
 // Desktop fills the canvas (width: null = fill).
-const DEVICES = [
+const DEVICES: DeviceInfo[] = [
   { key: 'desktop', Icon: DesktopIcon, title: 'Desktop — 1', width: null },
   { key: 'tablet', Icon: TabletIcon, title: 'Tablet (768px) — 2', width: 768 },
   { key: 'phone', Icon: PhoneIcon, title: 'Phone (375px) — 3', width: 375 },
   { key: 'canvas', Icon: CanvasIcon, title: 'Canvas — all breakpoints — 4', width: null },
 ];
 
-const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+
+interface PreviewPaneProps {
+  route?: string | null;
+  refreshKey?: number;
+  crumbs?: { id: string | null; label: string }[];
+  onCrumb?: (id: string | null) => void;
+  onRefresh?: () => void;
+  onRestart?: () => void;
+  selPath?: string | null;
+  navHoverPath?: string | null;
+  overlayInfo?: (p: string) => OutlineInfo | null;
+  onSelectPath?: (p: string | null) => void;
+  onOpenPath?: (p: string) => void;
+  focusPath?: string | null;
+  device?: string;
+  onDevice?: (d: string) => void;
+  onFrameMounted?: (ref: HTMLDivElement) => void;
+}
 
 export default function PreviewPane({
-  devUrl,
-  devStatus,
-  devLog,
-  devDiag,
   route,
-  refreshKey,
   crumbs,
   onCrumb,
   onRefresh,
@@ -64,15 +94,21 @@ export default function PreviewPane({
   onSelectPath,
   onOpenPath,
   focusPath,
-  device,
   onDevice,
   onFrameMounted,
-}) {
-  // The breakpoint lives in App so a re-mount of this pane can't silently
-  // kick the user out of a view (which would reload every preview iframe).
-  const setDevice = onDevice;
-  const [customW, setCustomW] = React.useState(null); // drag override
-  const [customH, setCustomH] = React.useState(null); // null = fill height
+}: PreviewPaneProps) {
+  const devUrl = useAppStore((s) => s.devUrl);
+  const devStatus = useAppStore((s) => s.devStatus);
+  const devLog = useAppStore((s) => s.devLog);
+  const devDiag = useAppStore((s) => s.devDiag);
+  const refreshKey = useAppStore((s) => s.refreshKey);
+  // The breakpoint lives on the store so a re-mount of this pane can't
+  // silently kick the user out of a view (which would reload every preview
+  // iframe).
+  const device = useAppStore((s) => s.device);
+
+  const [customW, setCustomW] = React.useState<number | null>(null); // drag override
+  const [customH, setCustomH] = React.useState<number | null>(null); // null = fill height
   const [resizing, setResizing] = React.useState(false);
   const url = devUrl && route ? devUrl + route : null;
   const width = customW ?? DEVICES.find((d) => d.key === device)?.width;
@@ -98,24 +134,15 @@ export default function PreviewPane({
   // Node outlines: the preview iframe reports rects for tracked node paths
   // (and the node hovered on the page); outlines render as an absolute
   // overlay in the frame, never inside the page itself.
-  const iframeRef = React.useRef(null);
-  const [rects, setRects] = React.useState({});
-  const [canvasHover, setCanvasHover] = React.useState(null);
+  const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
+  const [rects, setRects] = React.useState<Record<string, Array<{ x: number; y: number; w: number; h: number }>>>({});
+  const [canvasHover, setCanvasHover] = React.useState<string | null>(null);
 
-  // The path of the last selection made by clicking the page itself, so the
-  // scroll-into-view below can skip it.
-  const clickedPathRef = React.useRef(null);
-  // Which instance of a repeated node is outlined. Canvas clicks pick the one
-  // under the pointer; selections from anywhere else fall back to the first.
-  const lastClickRef = React.useRef(null);
+  const clickedPathRef = React.useRef<string | null>(null);
+  const lastClickRef = React.useRef<{ path: string | null; occ: number } | null>(null);
   const [selOcc, setSelOcc] = React.useState(0);
   const [hoverOcc, setHoverOcc] = React.useState(0);
-  // Canvas clicks set the instance directly (below) — including when they
-  // land on another instance of the node that's already selected, where
-  // selPath never changes. Any other route to a new selection means "the
-  // node", so it falls back to the first instance. The click marker is
-  // consumed here so coming back to the same node later starts at the first
-  // instance again.
+
   React.useEffect(() => {
     if (lastClickRef.current?.path === selPath) {
       lastClickRef.current = null;
@@ -126,7 +153,7 @@ export default function PreviewPane({
   }, [selPath]);
 
   React.useEffect(() => {
-    const onMsg = (e) => {
+    const onMsg = (e: MessageEvent) => {
       if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return;
       const d = e.data;
       if (d?.type === 'avb:rects') setRects(d.rects || {});
@@ -135,10 +162,6 @@ export default function PreviewPane({
         setHoverOcc(d.occurrence || 0);
       } else if (d?.type === 'avb:click-node' && onSelectPath) {
         clickedPathRef.current = d.path || null;
-        // Which instance was clicked: a node inside a loop renders once per
-        // item and only that one should light up. Set now, not from the
-        // effect above, so clicking a different instance of the already
-        // selected node still moves the outline.
         lastClickRef.current = { path: d.path || null, occ: d.occurrence || 0 };
         setSelOcc(d.occurrence || 0);
         onSelectPath(d.path || null);
@@ -151,8 +174,6 @@ export default function PreviewPane({
   }, [onSelectPath, onOpenPath]);
 
   const hoverPath = navHoverPath || canvasHover;
-  // A navigator hover means "the node", so every instance lights up; a canvas
-  // hover means the one under the pointer.
   const hoverOccUsed = navHoverPath ? null : hoverOcc;
   const trackKey = [...new Set([selPath, hoverPath, focusPath].filter(Boolean))].join('|');
   const sendTrack = React.useCallback(() => {
@@ -162,10 +183,6 @@ export default function PreviewPane({
   }, [trackKey]);
   React.useEffect(sendTrack, [sendTrack, url, refreshKey]);
 
-  // Selecting in the navigator (or via a breadcrumb) smooth-scrolls the page
-  // to the node. A selection that came from clicking the page is skipped —
-  // it's already on screen, and moving it would yank it out from under the
-  // pointer. Not sent on reload: the frame has no regions mapped yet.
   React.useEffect(() => {
     const w = iframeRef.current?.contentWindow;
     if (!w || !selPath) return;
@@ -176,22 +193,19 @@ export default function PreviewPane({
     w.postMessage({ type: 'avb:scroll-to', path: selPath }, '*');
   }, [selPath]);
 
-  // A reload wipes iframe state — clear stale boxes until fresh rects arrive.
   React.useEffect(() => {
     setRects({});
     setCanvasHover(null);
   }, [url, refreshKey]);
 
-  // Track the canvas width so "Fill" can be expressed in px too — CSS can
-  // only animate the frame width between two lengths, not px ↔ 100%.
-  const wrapRef = React.useRef(null);
-  const frameRef = React.useRef(null);
+  const wrapRef = React.useRef<HTMLDivElement | null>(null);
+  const frameRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
-    if (onFrameMounted) onFrameMounted(frameRef);
+    if (onFrameMounted) onFrameMounted(frameRef.current!);
   }, [onFrameMounted]);
 
-  const [wrapWidth, setWrapWidth] = React.useState(null);
+  const [wrapWidth, setWrapWidth] = React.useState<number | null>(null);
   React.useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -202,33 +216,27 @@ export default function PreviewPane({
     return () => ro.disconnect();
   }, []);
 
-  const selectDevice = (key) => setDevice(key);
+  const selectDevice = (key: string) => onDevice && onDevice(key);
 
-  // Any breakpoint change drops the drag-resize override — a click, a 1–4
-  // keypress, or App resetting the pane to desktop when a project opens.
-  // 'custom' is the drag itself, so it must not clear what the drag just set.
   React.useEffect(() => {
-    if (device === 'custom') return;
+    if ((device as string) === 'custom') return;
     setCustomW(null);
-    if (device === 'desktop' || device === 'canvas') setCustomH(null); // fills, so reset the height too
+    if (device === 'desktop' || device === 'canvas') setCustomH(null);
   }, [device]);
 
-  // Sliding highlight behind the active device button.
-  const btnRefs = React.useRef({});
-  const [indicator, setIndicator] = React.useState(null);
+  const btnRefs = React.useRef<Record<string, HTMLButtonElement | null>>({});
+  const [indicator, setIndicator] = React.useState<{ left: number; width: number } | null>(null);
   React.useLayoutEffect(() => {
     const el = btnRefs.current[device];
     if (!el) {
-      setIndicator(null); // drag-resized "custom" state — no active tab
+      setIndicator(null);
       return;
     }
     setIndicator({ left: el.offsetLeft, width: el.offsetWidth });
   }, [device]);
 
-  // 1 / 2 / 3 switch to the desktop / tablet / phone breakpoints (ignored
-  // while typing in a field so prop values can still contain digits).
   React.useEffect(() => {
-    const onKey = (e) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target;
       if (
@@ -237,16 +245,14 @@ export default function PreviewPane({
       ) {
         return;
       }
-      const key = { 1: 'desktop', 2: 'tablet', 3: 'phone', 4: 'canvas' }[e.key];
+      const key = ({ 1: 'desktop', 2: 'tablet', 3: 'phone', 4: 'canvas' } as Record<string, string>)[e.key];
       if (key) selectDevice(key);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Drag-resize from the edge handles. The frame is horizontally centered,
-  // so a side handle changes the width by twice the pointer movement.
-  const startResize = (edge) => (e) => {
+  const startResize = (edge: string) => (e: React.PointerEvent) => {
     e.preventDefault();
     const frame = frameRef.current;
     const wrap = wrapRef.current;
@@ -257,7 +263,7 @@ export default function PreviewPane({
     const startH = frame.offsetHeight;
     setResizing(true);
     document.body.style.cursor = edge === 's' ? 'row-resize' : 'col-resize';
-    const onMove = (ev) => {
+    const onMove = (ev: PointerEvent) => {
       if (edge === 's') {
         const h = Math.round(startH + (ev.clientY - startY));
         setCustomH(clamp(h, 160, Math.max(160, wrap.clientHeight - 32)));
@@ -265,7 +271,7 @@ export default function PreviewPane({
         const dx = ev.clientX - startX;
         const w = Math.round(startW + (edge === 'e' ? 2 : -2) * dx);
         setCustomW(clamp(w, 280, Math.max(280, wrap.clientWidth - 24)));
-        setDevice('custom');
+        onDevice && onDevice('custom');
       }
     };
     const onUp = () => {
@@ -282,7 +288,7 @@ export default function PreviewPane({
     <>
       <div className="preview-toolbar">
         <div className="crumbs">
-          {shownCrumbs.map((c, i) => {
+          {shownCrumbs.map((c: any, i: number) => {
             const last = i === shownCrumbs.length - 1;
             if (c.ellipsis) {
               return (
@@ -293,7 +299,7 @@ export default function PreviewPane({
                   <span
                     className="crumb crumb-more"
                     title={`Show ${c.hidden.length} more: ${c.hidden
-                      .map((h) => h.label)
+                      .map((h: { label: string }) => h.label)
                       .join(' › ')}`}
                     onClick={() => setCrumbsExpanded(true)}
                   >
@@ -357,9 +363,6 @@ export default function PreviewPane({
                 title="Site preview"
                 onLoad={sendTrack}
               />
-              {/* Editing a component: the page stays in context and everything
-                  around the instance dims, so the piece being worked on is
-                  the only lit part of the canvas. */}
               {focusPath &&
                 (rects[focusPath] || []).map((r, i) => (
                   <div
@@ -376,20 +379,15 @@ export default function PreviewPane({
               ]
                 .filter(Boolean)
                 .flatMap((o) => {
-                  // A loop child renders once per item — one box per
-                  // instance, each labelled, so an instance further down the
-                  // page still says what it is.
-                  const all = rects[o.path];
-                  const info = overlayInfo ? overlayInfo(o.path) : null;
+                  const all = rects[o!.path];
+                  const info = overlayInfo ? overlayInfo(o!.path) : null;
                   if (!all || !info) return [];
-                  // One box, not one per loop item, unless the hover came from
-                  // the navigator (which points at the node, not an instance).
                   const list =
-                    o.occ == null ? all : all[o.occ] ? [all[o.occ]] : all.slice(0, 1);
+                    o!.occ == null ? all : all[o!.occ] ? [all[o!.occ]] : all.slice(0, 1);
                   return list.map((r, i) => (
                     <div
-                      key={`${o.type}-${i}`}
-                      className={`node-outline ${o.type} ${info.kind}${info.bound ? ' bound' : ''}`}
+                      key={`${o!.type}-${i}`}
+                      className={`node-outline ${o!.type} ${info.kind}${info.bound ? ' bound' : ''}`}
                       style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
                     >
                       <span className={`node-outline-tag ${r.y < 20 ? 'inside' : ''}`}>
@@ -426,19 +424,22 @@ export default function PreviewPane({
   );
 }
 
-// The offline state. A raw Astro log is only useful to someone who already
-// knows what went wrong, so lead with the diagnosis (see dev:diagnose) and
-// keep the log a click away for the cases it doesn't cover.
 const NODE_URL = 'https://nodejs.org/en/download';
 
-function DevOffline({ devLog, devDiag, onRestart }) {
+interface DevOfflineProps {
+  devLog: string;
+  devDiag: any;
+  onRestart?: () => void;
+}
+
+function DevOffline({ devLog, devDiag, onRestart }: DevOfflineProps) {
   const [showLog, setShowLog] = React.useState(false);
   const kind = devDiag?.kind;
   const known = kind === 'no-node' || kind === 'node-too-old' || kind === 'no-deps';
 
-  let title = 'Preview is offline.';
-  let detail = null;
-  let action = null;
+  let title: React.ReactNode = 'Preview is offline.';
+  let detail: string | null = null;
+  let action: { label: string; url: string } | null = null;
 
   if (kind === 'no-node') {
     title = "Node.js isn't installed — or isn't where this app can see it.";
@@ -470,8 +471,6 @@ function DevOffline({ devLog, devDiag, onRestart }) {
           </button>
         )}
       </div>
-      {/* Always available: the diagnosis names the common failures, not the
-          project's own build errors, which is what the log is for. */}
       {devDiag?.nodePath && (
         <div className="offline-meta">
           Using Node {devDiag.nodeVersion || '?'} — {devDiag.nodePath}

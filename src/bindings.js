@@ -2,6 +2,7 @@
 // (`href={service.link}`), an `{expr}` child, or text with an interpolation
 // in it. Only the node's own props and its direct children count: a section
 // isn't "bound" just because something deep inside it is.
+/** @param {import('./types/ast').AstroNode | null | undefined} node */
 export function isDataBound(node) {
   if (!node) return false;
   for (const v of Object.values(node.props || {})) {

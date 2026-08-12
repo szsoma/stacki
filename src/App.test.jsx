@@ -1,8 +1,9 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import App from './App.jsx';
+import App from './App';
 
 const harness = vi.hoisted(() => ({
   menu: new Map(),
@@ -59,7 +60,7 @@ vi.mock('./panels/TerminalPanel.jsx', () => ({
   },
 }));
 
-vi.mock('./panels/PreviewPane.jsx', () => ({
+vi.mock('./panels/PreviewPane.tsx', () => ({
   default: () => (
     <div className="preview-frame-wrap">
       <iframe title="Design preview" />

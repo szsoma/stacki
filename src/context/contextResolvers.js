@@ -1,5 +1,23 @@
+/**
+ * A context source the prompt composer can pull from. Resolvers are
+ * registered by type and looked up by the chip that references them.
+ *
+ * @typedef {{
+ *   type: string,
+ *   label?: string,
+ *   isAvailable?: Function,
+ *   getDefaultOptions?: Function,
+ *   resolve?: Function,
+ *   renderMarkdown?: Function,
+ *   computeStaleKey?: Function,
+ *   [key: string]: any,
+ * }} ContextResolver
+ */
+
+/** @type {Map<string, ContextResolver>} */
 const registry = new Map();
 
+/** @param {ContextResolver} resolver */
 export function registerResolver(resolver) {
   if (!resolver || typeof resolver.type !== 'string' || !resolver.type) {
     throw new Error('Resolver must declare a string type.');
@@ -7,6 +25,7 @@ export function registerResolver(resolver) {
   registry.set(resolver.type, resolver);
 }
 
+/** @param {string} type */
 export function getResolver(type) {
   return registry.get(type);
 }

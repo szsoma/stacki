@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import { CONTEXT_CHIP_STATUS } from './contextTypes.js';
 import { getResolver } from './contextResolvers.js';
 
@@ -15,6 +16,9 @@ const STALE_NOTE = '_(captured earlier — may be out of date; refresh in Stacki
 // data (null, or an in-progress/failed resolve) and stay excluded.
 const INCLUDABLE_STATUSES = new Set([CONTEXT_CHIP_STATUS.READY, CONTEXT_CHIP_STATUS.STALE]);
 
+/**
+ * @param {{ request: any, snapshots: any[] }} args
+ */
 export function composePrompt({ request, snapshots }) {
   const sections = snapshots
     .filter((snapshot) => INCLUDABLE_STATUSES.has(snapshot.status))

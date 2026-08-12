@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef, useState } from 'react';
 import { CheckIcon } from './Icons.jsx';
 
@@ -127,6 +128,13 @@ function domToNodes(el) {
   return out;
 }
 
+/**
+ * @param {{
+ *   nodes?: any[],
+ *   onChange?: (nodes: any[]) => void,
+ *   exprOptions?: { insert: string, label?: string }[],
+ * }} props
+ */
 export default function RichContent({ nodes, onChange, exprOptions }) {
   const hostRef = useRef(null);
   const bubbleRef = useRef(null);

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef } from 'react';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
@@ -69,8 +70,17 @@ export const appHighlight = syntaxHighlighting(
   )
 );
 
+/**
+ * @param {{
+ *   value?: string,
+ *   language?: string,
+ *   onChange?: (value: string) => void,
+ * }} props
+ */
 export default function CodeEditor({ value, language, onChange }) {
+  /** @type {React.RefObject<HTMLDivElement | null>} */
   const hostRef = useRef(null);
+  /** @type {React.MutableRefObject<EditorView | null>} */
   const viewRef = useRef(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -78,7 +88,7 @@ export default function CodeEditor({ value, language, onChange }) {
   useEffect(() => {
     const lang = language === 'css' ? css() : javascript({ typescript: true });
     const view = new EditorView({
-      parent: hostRef.current,
+      parent: hostRef.current ?? undefined,
       state: EditorState.create({
         doc: value ?? '',
         extensions: [

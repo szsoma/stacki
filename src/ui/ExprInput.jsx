@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef, useState } from 'react';
 import { EditorView, keymap, drawSelection, placeholder as cmPlaceholder } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
@@ -12,6 +13,17 @@ import { appTheme, appHighlight } from './CodeEditor.jsx';
 // it stores, and feeding that back would fight every keystroke. External
 // changes are applied through `syncValue`, which only replaces the document
 // when the text genuinely differs from what's on screen.
+/**
+ * @param {{
+ *   value?: string,
+ *   onChange?: (value: string) => void,
+ *   onCommit?: (value: string) => any,
+ *   placeholder?: string,
+ *   autoFocus?: boolean,
+ *   syncValue?: string,
+ *   invalid?: boolean,
+ * }} props
+ */
 export default function ExprInput({
   value,
   onChange,

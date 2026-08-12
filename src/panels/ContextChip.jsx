@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React from 'react';
 import { CloseIcon } from '../ui/Icons.jsx';
 
@@ -7,6 +8,9 @@ const STATUS_LABEL = {
   error: 'Error',
 };
 
+/**
+ * @param {{ snapshot: any, onOpenDetails?: Function, onRemove?: Function }} props
+ */
 export default function ContextChip({ snapshot, onOpenDetails, onRemove }) {
   const suffix = STATUS_LABEL[snapshot.status];
   return (

@@ -1,7 +1,12 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 export const TERMINAL_DEFAULT_WIDTH = 480;
 export const TERMINAL_MIN_WIDTH = 320;
 export const TERMINAL_MAX_RATIO = 0.7;
 
+/**
+ * @param {number} width
+ * @param {number} workspaceWidth
+ */
 export function clampTerminalWidth(width, workspaceWidth) {
   const safeWorkspace = Math.max(
     TERMINAL_MIN_WIDTH,

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { FileIcon, ChevronDownIcon, CheckIcon } from './Icons.jsx';
 

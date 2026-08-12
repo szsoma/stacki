@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearResolvers, registerResolver } from './contextResolvers.js';
 import { createSnapshot, withError, withReady, withStale } from './contextTypes.js';

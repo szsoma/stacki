@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { cmsSchemaResolver } from './cmsSchemaResolver.js';
 import { CONTEXT_CHIP_TYPES } from './contextTypes.js';

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useCallback, useEffect, useState } from 'react';
 import { CmsIcon, PlusIcon, ChevronRightIcon, GearIcon } from '../ui/Icons.jsx';
 import { collectionOf } from '../cmsSchema.js';

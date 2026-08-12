@@ -68,7 +68,11 @@ export interface AvbApi {
   listStyleFiles(args: unknown): Promise<{ files: unknown[] }>;
   mkdirAssets(args: unknown): Promise<unknown>;
   moveAsset(args: unknown): Promise<unknown>;
-  movePage(args: Record<string, unknown>): Promise<unknown>;
+  movePage(args: {
+    projectPath: string;
+    from: string;
+    to: string;
+  }): Promise<{ newPath: string }>;
   nativeCopy(): void;
   nativePaste(): void;
   newProjectDialog(): Promise<string | null>;
@@ -86,7 +90,7 @@ export interface AvbApi {
   openExternal(url: string): void;
   openProjectDialog(): Promise<string | null>;
   pickUploadAssets(args: unknown): Promise<unknown>;
-  readAssetText(args: unknown): Promise<unknown>;
+  readAssetText(args: { projectPath: string; rel: string }): Promise<{ text: string }>;
   readCms(args: unknown): Promise<unknown>;
   readContextFile(args: unknown): Promise<unknown>;
   readPage(path: string): Promise<PageState>;
@@ -105,7 +109,7 @@ export interface AvbApi {
   stopDevServer(): Promise<unknown>;
   uploadAssets(args: unknown): Promise<unknown>;
   watchProject(path: string): void;
-  writeAssetText(args: unknown): Promise<unknown>;
+  writeAssetText(args: { projectPath: string; rel: string; text: string }): Promise<unknown>;
   writeCms(args: unknown): Promise<unknown>;
   writeContextBundle(args: unknown): Promise<unknown>;
   writePage(args: { pagePath: string; model: PageModel }): Promise<unknown>;

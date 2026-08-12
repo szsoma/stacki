@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef } from 'react';
 
 export default function ContextDetailsPopover({ snapshot, markdown, onRefresh, onRemove, onClose }) {

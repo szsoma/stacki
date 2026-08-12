@@ -6,8 +6,12 @@
 // never leave this window, so a module-level record is enough.
 //
 // { kind: 'node' | 'component', tag?: string, nodeKind?: string, id?: string }
+/** @typedef {{ kind: 'node' | 'component', tag?: string, nodeKind?: string, id?: string }} DragInfo */
+
+/** @type {DragInfo | null} */
 let current = null;
 
+/** @param {DragInfo | null | undefined} info */
 export function setDrag(info) {
   current = info || null;
 }

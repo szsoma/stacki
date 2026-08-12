@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // Preview iframes (nodeIntegrationInSubFrames runs this preload in them too):

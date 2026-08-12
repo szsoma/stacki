@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import { addressesAt, collectionOf, labelize, setAtAddress, titleOf } from './cmsSchema.js';
 
 // Every reference/multi-reference field declared anywhere in the project,

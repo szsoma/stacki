@@ -3,10 +3,20 @@ import type { StateCreator } from 'zustand';
 export type LeftTab = 'pages' | 'navigator' | 'components' | 'assets' | 'cms' | 'terminal' | null;
 export type RightTab = 'style' | 'settings';
 
+/**
+ * The floating code editor holds one of two things, and they are addressed
+ * differently: a fragment of the open page (its frontmatter, or a raw
+ * <style>/<script> node, keyed by node id) or a whole text file under public/
+ * (keyed by its project-relative path).
+ */
+export type CodeWin =
+  | { kind?: undefined; targetId: string; title: string; language: string }
+  | { kind: 'file'; rel: string; title: string; language: string };
+
 export interface UiSlice {
   leftTab: LeftTab;
   rightTab: RightTab;
-  codeWin: { targetId?: string; kind: 'file'; title: string; language: string } | null;
+  codeWin: CodeWin | null;
   insertOpen: boolean;
   busy: string | null;
   toast: { msg: string; kind: string } | null;

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 // Built-in attribute schemas for plain HTML elements, in the same shape as
 // the parser's component prop schemas ({name, type, options, default}).
 // HTML elements have no interface Props, so without this their attributes
@@ -94,8 +95,12 @@ const SCHEMAS = {
 };
 
 // Returns the built-in attribute schema for an HTML tag ([] if unknown).
+/**
+ * @param {string} tag
+ * @returns {import('./types/ipc').PropField[]}
+ */
 export function getElementSchema(tag) {
-  return SCHEMAS[String(tag).toLowerCase()] || [];
+  return /** @type {any} */ (SCHEMAS)[String(tag).toLowerCase()] || [];
 }
 
 // Standard body-level HTML tags for the element tag-switcher autocomplete
@@ -163,6 +168,10 @@ const ONLY_CHILDREN = {
 
 // Whether `childTag` is valid markup directly inside `parentTag`. Unknown or
 // custom tags are permitted: better to allow than to block a valid page.
+/**
+ * @param {string} parentTag
+ * @param {string} childTag
+ */
 export function canContainTag(parentTag, childTag) {
   const parent = String(parentTag || '').toLowerCase();
   const child = String(childTag || '').toLowerCase();

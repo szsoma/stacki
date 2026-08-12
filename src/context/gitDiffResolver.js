@@ -10,6 +10,7 @@ export const gitDiffResolver = {
   // getGitDiff(), which resolve() does — a non-repo shows up as this chip's
   // ERROR status with "This project is not a Git repository." (spec §26),
   // the same generic error-chip UX every other resolver already uses.
+  /** @param {any} appState */
   isAvailable(appState) {
     return !!appState.projectPath;
   },
@@ -18,6 +19,10 @@ export const gitDiffResolver = {
     return { scope: 'all' };
   },
 
+  /**
+   * @param {any} appState
+   * @param {any} [options]
+   */
   async resolve(appState, options) {
     const scope = options?.scope || 'all';
     const result = await appState.getGitDiff();
@@ -43,6 +48,7 @@ export const gitDiffResolver = {
     };
   },
 
+  /** @param {any} snapshot */
   renderMarkdown(snapshot) {
     const { branch, scope, staged, unstaged, untracked, recentCommits, truncated, secretWarnings } = snapshot.data;
     const lines = ['### Git diff', ''];

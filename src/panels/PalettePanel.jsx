@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef, useState } from 'react';
 import { ElementComponentIcon, LayoutIcon } from '../ui/Icons.jsx';
 import { setDrag, clearDrag } from '../dragState.js';

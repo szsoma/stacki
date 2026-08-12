@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CONTEXT_CHIP_STATUS,

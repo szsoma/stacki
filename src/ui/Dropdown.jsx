@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDownIcon, CheckIcon } from './Icons.jsx';
 
@@ -13,6 +14,16 @@ import { ChevronDownIcon, CheckIcon } from './Icons.jsx';
 // `livePreview={false}` turns the hover/arrow preview off, for values where
 // applying one costs more than a repaint — a loop's data source rewrites the
 // page's code, so skimming the list would churn through every option.
+/**
+ * @param {{
+ *   value?: string,
+ *   options: { value: string, label?: string, icon?: any, hint?: string }[],
+ *   onChange?: (value: string, immediate?: boolean) => void,
+ *   className?: string,
+ *   placeholder?: string,
+ *   livePreview?: boolean,
+ * }} props
+ */
 export default function Dropdown({
   value,
   options,

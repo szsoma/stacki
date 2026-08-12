@@ -4,6 +4,7 @@ export const SIZE_THRESHOLDS = Object.freeze({
   BLOCK_INLINE: 30000,
 });
 
+/** @param {number} tokens */
 export function sizeLevel(tokens) {
   if (tokens > SIZE_THRESHOLDS.BLOCK_INLINE) return 'blocked';
   if (tokens > SIZE_THRESHOLDS.LARGE) return 'large';
@@ -22,6 +23,9 @@ const FILE_TRIGGERING_TYPES = new Set(['git-diff']);
 // that's already far past the 8,000-character trigger below, so no separate
 // token check is needed here; BLOCK_INLINE still matters for sizeLevel()'s
 // 'blocked' indicator.
+/**
+ * @param {{ chips: any[], composedMarkdown: string }} args
+ */
 export function shouldUseContextFile({ chips, composedMarkdown }) {
   if (composedMarkdown.length > 8000) return true;
 

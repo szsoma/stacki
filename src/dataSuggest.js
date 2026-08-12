@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 // Heuristic static analysis powering the loop "Data" suggestions: top-level
 // frontmatter declarations and imports, ancestor loop variables, and — by
 // reading object literals — the keys nested inside them, so `service`

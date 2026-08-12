@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useRef, useState } from 'react';
 import { CheckIcon, CloseIcon, TrashIcon, WarningIcon } from '../ui/Icons.jsx';
 import { clearIncomingReference } from '../cmsReferences.js';

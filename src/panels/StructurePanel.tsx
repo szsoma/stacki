@@ -18,7 +18,61 @@ import {
   elementIcon,
   CustomElementIcon,
 } from '../ui/Icons.jsx';
+import { useAppStore } from '../store';
+import { selectCurrentLayoutName } from '../store/selectors';
+import type { AstroNode } from '../types/ast';
 
+interface StructurePanelProps {
+  onSelect?: (id: string | null) => void;
+  onHoverNode?: (id: string | null) => void;
+  onOpenComponent?: (name: string, id: string) => void;
+  onChangeLayout?: (layoutName: string) => void;
+  onDropComponent?: (name: string, target: any) => void;
+  onMoveNode?: (nodeId: string, target: any) => void;
+  onRemoveNode?: (nodeId: string) => void;
+  onCopyNode?: (nodeId: string) => void;
+  onDuplicateNode?: (nodeId: string) => void;
+  onPasteNode?: () => void;
+  hasClipboard?: () => boolean;
+  onRawChange?: (value: string) => void;
+}
+
+interface DropTarget {
+  parentId: string | null;
+  index: number;
+  intoId?: string;
+}
+
+interface CtxMenuState {
+  x: number;
+  y: number;
+  nodeId: string;
+}
+
+interface NodeListCtx {
+  selectedId: string | null;
+  currentLayoutName: string;
+  onChangeLayout?: (layoutName: string) => void;
+  onHoverNode?: (id: string | null) => void;
+  onOpenComponent?: (name: string, id: string) => void;
+  isCollapsed: (node: AstroNode) => boolean;
+  dropTarget: DropTarget | null;
+  setDropTarget: (t: DropTarget | null) => void;
+  isDndPayload: (e: React.DragEvent) => boolean;
+  performDrop: (e: React.DragEvent, target: DropTarget) => void;
+  nodeById: (id: string) => AstroNode | null;
+  onSelect: (id: string) => void;
+  onRemoveNode?: (nodeId: string) => void;
+  toggleCollapse: (node: AstroNode) => void;
+  openContextMenu: (x: number, y: number, nodeId: string) => void;
+}
+
+interface FoundNode {
+  node: AstroNode;
+  parent: AstroNode | null;
+  siblings: AstroNode[];
+  index: number;
+}
 
 // The page structure tree: layout wrapper + nested nodes (components,
 // elements, text, comments). Supports:
@@ -27,11 +81,6 @@ import {
 //  - reordering/reparenting existing nodes (avb/node) the same way
 //  - collapse/expand for nodes with children
 export default function StructurePanel({
-  pageState,
-  layouts,
-  currentLayoutName,
-  selectedId,
-  revealTick,
   onSelect,
   onHoverNode,
   onOpenComponent,
@@ -44,38 +93,40 @@ export default function StructurePanel({
   onPasteNode,
   hasClipboard,
   onRawChange,
-}) {
+}: StructurePanelProps) {
+  const pageState = useAppStore((s) => s.pageState);
+  const selectedId = useAppStore((s) => s.selectedId);
+  const revealTick = useAppStore((s) => s.revealTick);
+  const currentLayoutName = useAppStore(selectCurrentLayoutName);
+
   // dropTarget: {parentId, index} for gaps, {intoId} for node rows
-  const [dropTarget, setDropTarget] = useState(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   // Manual expand/collapse overrides by node id; nodes not in the map use
   // their default (text-only children start collapsed).
-  const [toggled, setToggled] = useState(() => new Map());
-  const [ctxMenu, setCtxMenu] = useState(null); // {x, y, nodeId}
+  const [toggled, setToggled] = useState<Map<string, boolean>>(() => new Map());
+  const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null);
   // Expand-all / collapse-all toggle in the header, with a delayed tooltip.
   const [allExpanded, setAllExpanded] = useState(false);
-  const [headerTip, setHeaderTip] = useState(null); // {left, top}
-  const tipTimer = useRef(null);
-  useEffect(() => () => clearTimeout(tipTimer.current), []);
+  const [headerTip, setHeaderTip] = useState<{ left: number; top: number } | null>(null);
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => clearTimeout(tipTimer.current!), []);
 
-  const showTipSoon = (e) => {
+  const showTipSoon = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    clearTimeout(tipTimer.current);
+    clearTimeout(tipTimer.current!);
     tipTimer.current = setTimeout(
       () => setHeaderTip({ left: rect.left + rect.width / 2, top: rect.bottom + 8 }),
       500
     );
   };
   const hideTip = () => {
-    clearTimeout(tipTimer.current);
+    clearTimeout(tipTimer.current!);
     setHeaderTip(null);
   };
 
-  // Arrow-key navigation from the selected node: ←/→ between siblings,
-  // ↑ to the parent, ↓ to the first child (expanding a collapsed node so
-  // the child is visible).
   useEffect(() => {
     if (!pageState?.editable || !selectedId) return;
-    const onKey = (e) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
       const t = e.target;
@@ -87,36 +138,32 @@ export default function StructurePanel({
       }
       const found = findWithParent(pageState.model.nodes, selectedId, null);
       if (!found) return;
-      e.preventDefault(); // keep arrows from scrolling the panel
+      e.preventDefault();
       const { node, parent, siblings, index } = found;
-      let next = null;
-      if (e.key === 'ArrowLeft') next = siblings[index - 1];
-      else if (e.key === 'ArrowRight') next = siblings[index + 1];
+      let next: AstroNode | null = null;
+      if (e.key === 'ArrowLeft') next = siblings[index - 1] ?? null;
+      else if (e.key === 'ArrowRight') next = siblings[index + 1] ?? null;
       else if (e.key === 'ArrowUp') next = parent;
       else if (
         e.key === 'ArrowDown' &&
         Array.isArray(node.children) &&
         node.children.length > 0 &&
-        // Content-only children aren't shown in the navigator — don't
-        // descend into rows that don't exist.
         !node.children.every(isContentOnlyChild)
       ) {
-        const collapsed = toggled.has(node.id) ? toggled.get(node.id) : defaultCollapsed(node);
+        const collapsed = toggled.has(node.id) ? toggled.get(node.id)! : defaultCollapsed(node);
         if (collapsed) setToggled((prev) => new Map(prev).set(node.id, false));
         next = node.children[0];
       }
-      if (next) onSelect(next.id);
+      if (next) onSelect?.(next.id);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pageState, selectedId, toggled, onSelect]);
 
-  // Reveal the selection: with everything collapsed by default, selecting a
-  // node from the canvas or breadcrumbs must expand its ancestors.
   useEffect(() => {
     if (!pageState?.editable || !selectedId || selectedId === 'frontmatter') return;
-    const chain = [];
-    const walk = (list, trail) => {
+    const chain: AstroNode[] = [];
+    const walk = (list: AstroNode[], trail: AstroNode[]): boolean => {
       for (const n of list) {
         if (n.id === selectedId) {
           chain.push(...trail);
@@ -132,7 +179,7 @@ export default function StructurePanel({
       let changed = false;
       const next = new Map(prev);
       for (const a of chain) {
-        const collapsed = next.has(a.id) ? next.get(a.id) : defaultCollapsed(a);
+        const collapsed = next.has(a.id) ? next.get(a.id)! : defaultCollapsed(a);
         if (collapsed) {
           next.set(a.id, false);
           changed = true;
@@ -142,20 +189,16 @@ export default function StructurePanel({
     });
   }, [pageState, selectedId]);
 
-  // Clicking an element on the page scrolls its row into view here — with no
-  // animation, and only when the row is off screen, so selecting something
-  // already visible leaves the list where it is. Waits a frame: the effect
-  // above may still need to expand the ancestors that mount the row.
-  const bodyRef = useRef(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   const lastReveal = useRef(revealTick);
   useEffect(() => {
-    if (revealTick === lastReveal.current) return; // a plain selection change
+    if (revealTick === lastReveal.current) return;
     lastReveal.current = revealTick;
     if (!selectedId) return;
     const frame = requestAnimationFrame(() => {
       const body = bodyRef.current;
       const row = body?.querySelector(`[data-node-id="${CSS.escape(selectedId)}"]`);
-      if (!row) return;
+      if (!row || !body) return;
       const b = body.getBoundingClientRect();
       const r = row.getBoundingClientRect();
       if (r.top >= b.top && r.bottom <= b.bottom) return;
@@ -189,7 +232,7 @@ export default function StructurePanel({
           <textarea
             spellCheck={false}
             value={pageState.source}
-            onChange={(e) => onRawChange(e.target.value)}
+            onChange={(e) => onRawChange?.(e.target.value)}
           />
         </div>
       </div>
@@ -200,30 +243,29 @@ export default function StructurePanel({
 
   const clearDrop = () => setDropTarget(null);
 
-  const isDndPayload = (e) =>
+  const isDndPayload = (e: React.DragEvent) =>
     e.dataTransfer.types.includes('avb/component') || e.dataTransfer.types.includes('avb/node');
 
-  const performDrop = (e, target) => {
+  const performDrop = (e: React.DragEvent, target: DropTarget) => {
     e.preventDefault();
     e.stopPropagation();
     clearDrop();
     const compName = e.dataTransfer.getData('avb/component');
     const nodeId = e.dataTransfer.getData('avb/node');
-    if (compName) onDropComponent(compName, target);
-    else if (nodeId) onMoveNode(nodeId, target);
+    if (compName) onDropComponent?.(compName, target);
+    else if (nodeId) onMoveNode?.(nodeId, target);
   };
 
-  const isCollapsed = (node) =>
-    toggled.has(node.id) ? toggled.get(node.id) : defaultCollapsed(node);
+  const isCollapsed = (node: AstroNode) =>
+    toggled.has(node.id) ? toggled.get(node.id)! : defaultCollapsed(node);
 
-  const toggleCollapse = (node) =>
+  const toggleCollapse = (node: AstroNode) =>
     setToggled((prev) => new Map(prev).set(node.id, !isCollapsed(node)));
 
-  // Alternates between expanding and collapsing every node with children.
   const toggleAll = () => {
     const collapsed = allExpanded;
-    const map = new Map();
-    const walk = (list) =>
+    const map = new Map<string, boolean>();
+    const walk = (list: AstroNode[]) =>
       list.forEach((n) => {
         if (Array.isArray(n.children) && n.children.length > 0) {
           map.set(n.id, collapsed);
@@ -261,7 +303,7 @@ export default function StructurePanel({
         <div
           className={`structure-node frontmatter-node ${selectedId === 'frontmatter' ? 'selected' : ''}`}
           style={{ paddingLeft: 6 }}
-          onClick={() => onSelect('frontmatter')}
+          onClick={() => onSelect?.('frontmatter')}
         >
           <span className="drag-handle" style={{ visibility: 'hidden' }}>
             <DragIcon size={11} />
@@ -290,11 +332,11 @@ export default function StructurePanel({
           isDndPayload={isDndPayload}
           performDrop={performDrop}
           nodeById={(id) => findNodeIn(model.nodes, id)}
-          onSelect={onSelect}
+          onSelect={(id: string) => onSelect?.(id)}
           onRemoveNode={onRemoveNode}
           toggleCollapse={toggleCollapse}
           openContextMenu={(x, y, nodeId) => {
-            onSelect(nodeId);
+            onSelect?.(nodeId);
             setCtxMenu({ x, y, nodeId });
           }}
         />
@@ -322,10 +364,10 @@ export default function StructurePanel({
           onClose={() => setCtxMenu(null)}
           onAction={(action) => {
             setCtxMenu(null);
-            if (action === 'copy') onCopyNode(ctxMenu.nodeId);
-            else if (action === 'duplicate') onDuplicateNode(ctxMenu.nodeId);
-            else if (action === 'paste') onPasteNode();
-            else if (action === 'delete') onRemoveNode(ctxMenu.nodeId);
+            if (action === 'copy') onCopyNode?.(ctxMenu.nodeId);
+            else if (action === 'duplicate') onDuplicateNode?.(ctxMenu.nodeId);
+            else if (action === 'paste') onPasteNode?.();
+            else if (action === 'delete') onRemoveNode?.(ctxMenu.nodeId);
           }}
         />
       )}
@@ -333,19 +375,28 @@ export default function StructurePanel({
   );
 }
 
-// Right-click menu for navigator nodes.
-function ContextMenu({ pos, canPaste, onClose, onAction }) {
-  const ref = useRef(null);
+function ContextMenu({
+  pos,
+  canPaste,
+  onClose,
+  onAction,
+}: {
+  pos: CtxMenuState;
+  canPaste: boolean;
+  onClose: () => void;
+  onAction: (action: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const onDown = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
-    const onKey = (e) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    const onScroll = (e) => {
-      if (ref.current && ref.current.contains(e.target)) return;
+    const onScroll = (e: Event) => {
+      if (ref.current && ref.current.contains(e.target as Node)) return;
       onClose();
     };
     document.addEventListener('mousedown', onDown);
@@ -360,14 +411,23 @@ function ContextMenu({ pos, canPaste, onClose, onAction }) {
     };
   }, [onClose]);
 
-  // Keep the menu on-screen.
   const width = 200;
   const itemCount = 4;
   const height = itemCount * 26 + 18;
   const left = Math.min(pos.x, window.innerWidth - width - 8);
   const top = Math.min(pos.y, window.innerHeight - height - 8);
 
-  const Item = ({ action, label, shortcut, disabled }) => (
+  const Item = ({
+    action,
+    label,
+    shortcut,
+    disabled,
+  }: {
+    action: string;
+    label: string;
+    shortcut?: string;
+    disabled?: boolean;
+  }) => (
     <div
       className={`ctx-menu-item ${disabled ? 'disabled' : ''}`}
       onClick={() => !disabled && onAction(action)}
@@ -388,7 +448,16 @@ function ContextMenu({ pos, canPaste, onClose, onAction }) {
   );
 }
 
-function NodeList({ nodes, parentId, depth, ...ctx }) {
+function NodeList({
+  nodes,
+  parentId,
+  depth,
+  ...ctx
+}: {
+  nodes: AstroNode[];
+  parentId: string | null;
+  depth: number;
+} & NodeListCtx) {
   return (
     <>
       {nodes.map((node, i) => (
@@ -402,7 +471,7 @@ function NodeList({ nodes, parentId, depth, ...ctx }) {
   );
 }
 
-function findNodeIn(nodes, id) {
+function findNodeIn(nodes: AstroNode[], id: string): AstroNode | null {
   for (const n of nodes) {
     if (n.id === id) return n;
     if (Array.isArray(n.children)) {
@@ -413,17 +482,32 @@ function findNodeIn(nodes, id) {
   return null;
 }
 
-// Whether the node currently being dragged may legally live inside `parent`
-// (null = page root). Components are opaque — their rendered markup is
-// unknown, so they're never blocked.
-function acceptsDrag(parent) {
-  const d = getDrag();
+function acceptsDrag(parent: AstroNode | null) {
+  const d = getDrag() as { tag?: string; nodeKind?: string } | null;
   if (!d || !d.tag || d.nodeKind !== 'element') return true;
   if (!parent || parent.kind !== 'element') return true;
-  return canContainTag(parent.name, d.tag);
+  return canContainTag((parent as any).name, d.tag);
 }
 
-function Gap({ parentId, index, depth, dropTarget, setDropTarget, isDndPayload, performDrop, nodeById }) {
+function Gap({
+  parentId,
+  index,
+  depth,
+  dropTarget,
+  setDropTarget,
+  isDndPayload,
+  performDrop,
+  nodeById,
+}: {
+  parentId: string | null;
+  index: number;
+  depth: number;
+  dropTarget: DropTarget | null;
+  setDropTarget: (t: DropTarget | null) => void;
+  isDndPayload: (e: React.DragEvent) => boolean;
+  performDrop: (e: React.DragEvent, target: DropTarget) => void;
+  nodeById: (id: string) => AstroNode | null;
+}) {
   const active =
     dropTarget && dropTarget.parentId === parentId && dropTarget.index === index && !dropTarget.intoId;
   const ok = acceptsDrag(parentId ? nodeById(parentId) : null);
@@ -445,7 +529,18 @@ function Gap({ parentId, index, depth, dropTarget, setDropTarget, isDndPayload, 
   );
 }
 
-function TreeNode({ node, parentId, index, depth, ...ctx }) {
+function TreeNode({
+  node,
+  parentId,
+  index,
+  depth,
+  ...ctx
+}: {
+  node: AstroNode;
+  parentId: string | null;
+  index: number;
+  depth: number;
+} & NodeListCtx) {
   const {
     selectedId,
     currentLayoutName,
@@ -464,16 +559,13 @@ function TreeNode({ node, parentId, index, depth, ...ctx }) {
   const isLayoutNode = node.id === 'layout';
   const isSelected = selectedId === node.id;
 
-  // Keep the selected row visible while navigating with the arrow keys.
-  const rowRef = useRef(null);
+  const rowRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (isSelected) rowRef.current?.scrollIntoView({ block: 'nearest' });
   }, [isSelected]);
 
   const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-  // Pure text (plus simple {expr} interpolations) is edited via the Content
-  // field — showing those as rows is noise until real tags are involved.
-  const showChildren = hasChildren && !node.children.every(isContentOnlyChild);
+  const showChildren = hasChildren && !(node.children as AstroNode[]).every(isContentOnlyChild);
   const canHostChildren =
     node.kind === 'component' ||
     node.kind === 'element' ||
@@ -485,7 +577,7 @@ function TreeNode({ node, parentId, index, depth, ...ctx }) {
   let { icon, label } = describeNode(node);
   if (isLayoutNode) {
     icon = <LayoutIcon size={13} />;
-    label = currentLayoutName || node.name;
+    label = currentLayoutName || (node as any).name;
   }
 
   return (
@@ -510,7 +602,7 @@ function TreeNode({ node, parentId, index, depth, ...ctx }) {
           if (canHostChildren && acceptsDrag(node) && isDndPayload(e)) {
             e.preventDefault();
             e.stopPropagation();
-            setDropTarget({ intoId: node.id });
+            setDropTarget({ parentId: null, index: 0, intoId: node.id });
           }
         }}
         onDrop={(e) => {
@@ -526,13 +618,12 @@ function TreeNode({ node, parentId, index, depth, ...ctx }) {
           onSelect(node.id);
         }}
         onDoubleClick={(e) => {
-          // Drill into a component's own file, the way Webflow opens one.
           if (node.kind !== 'component' || node.dynamicTag || !onOpenComponent) return;
           e.stopPropagation();
           onOpenComponent(node.name, node.id);
         }}
-        onMouseEnter={() => onHoverNode && onHoverNode(node.id)}
-        onMouseLeave={() => onHoverNode && onHoverNode(null)}
+        onMouseEnter={() => onHoverNode?.(node.id)}
+        onMouseLeave={() => onHoverNode?.(null)}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -562,24 +653,20 @@ function TreeNode({ node, parentId, index, depth, ...ctx }) {
       </div>
 
       {showChildren && !nodeCollapsed && (
-        <NodeList nodes={node.children} parentId={node.id} depth={depth + 1} {...ctx} />
+        <NodeList nodes={node.children as AstroNode[]} parentId={node.id} depth={depth + 1} {...ctx} />
       )}
     </>
   );
 }
 
-// Children the Content field fully covers: plain text and simple {expr}
-// interpolations (single braces, no JSX). These get no navigator rows.
-function isContentOnlyChild(c) {
+function isContentOnlyChild(c: AstroNode) {
   return (
     c.kind === 'text' ||
-    (c.kind === 'expr' && /^\{[^{}]*\}$/.test(c.value) && !c.value.includes('<'))
+    (c.kind === 'expr' && /^\{[^{}]*\}$/.test(c.value ?? '') && !(c.value ?? '').includes('<'))
   );
 }
 
-// Locates a node plus its parent, sibling list, and index — the context the
-// arrow-key navigation needs.
-function findWithParent(nodes, id, parent) {
+function findWithParent(nodes: AstroNode[], id: string, parent: AstroNode | null): FoundNode | null {
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
     if (n.id === id) return { node: n, parent, siblings: nodes, index: i };
@@ -591,29 +678,21 @@ function findWithParent(nodes, id, parent) {
   return null;
 }
 
-// Components/elements whose children are all text (or comments) start
-// collapsed — their text is editable via the Content field in the props panel.
-// Everything starts collapsed; expanding is always an explicit action
-// (chevron, expand-all, arrow-down navigation, or selection reveal).
-function defaultCollapsed(node) {
+function defaultCollapsed(node: AstroNode) {
   return Array.isArray(node.children) && node.children.length > 0;
 }
 
-// The row's icon already says what kind a node is, so no trailing kind badge
-// ("comment", "loop", …) — it only repeated the icon in words.
-function describeNode(node) {
+function describeNode(node: AstroNode): { icon: React.ReactNode; label: string } {
   switch (node.kind) {
     case 'text':
-      return { icon: <TextIcon size={12} />, label: truncate(node.value, 34) };
+      return { icon: <TextIcon size={12} />, label: truncate(node.value ?? '', 34) };
     case 'comment':
-      return { icon: <CommentIcon size={12} />, label: truncate(node.value.trim(), 30) };
+      return { icon: <CommentIcon size={12} />, label: truncate((node.value ?? '').trim(), 30) };
     case 'raw':
-      return { icon: <CodeIcon size={12} />, label: node.name };
+      return { icon: <CodeIcon size={12} />, label: node.name ?? '' };
     case 'raw-line':
-      return { icon: <CodeIcon size={12} />, label: truncate(node.value, 30) };
+      return { icon: <CodeIcon size={12} />, label: truncate(node.value ?? '', 30) };
     case 'element': {
-      // Webflow-style label: the first class name when the element has
-      // classes, the bare tag name otherwise.
       const cls = node.props?.class;
       const classes =
         cls && cls.type === 'string' ? cls.value.trim().split(/\s+/).filter(Boolean) : [];
@@ -621,11 +700,11 @@ function describeNode(node) {
       return { icon: elementIcon(node.name), label };
     }
     case 'chunk-group':
-      return { icon: <FileIcon size={12} />, label: node.name };
+      return { icon: <FileIcon size={12} />, label: node.name ?? '' };
     case 'expr':
       return {
         icon: <CodeIcon size={12} />,
-        label: truncate(node.value.replace(/\s+/g, ' '), 34),
+        label: truncate((node.value ?? '').replace(/\s+/g, ' '), 34),
       };
     case 'map': {
       const at = node.head.indexOf('.map');
@@ -635,16 +714,14 @@ function describeNode(node) {
       };
     }
     default:
-      // `<Tag>` from `const Tag = tag` is a dynamic element, not a component
-      // — no file behind it, so it shouldn't wear the component's colours.
       if (node.dynamicTag) {
-        return { icon: <CustomElementIcon size={12} />, label: node.name };
+        return { icon: <CustomElementIcon size={12} />, label: node.name ?? '' };
       }
-      return { icon: <ElementComponentIcon size={14} />, label: node.name };
+      return { icon: <ElementComponentIcon size={14} />, label: node.name ?? '' };
   }
 }
 
-function truncate(s, n) {
+function truncate(s: string, n: number) {
   s = String(s);
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }

@@ -4,7 +4,6 @@ import { elementIcon } from '../ui/Icons.jsx';
 import Dropdown from '../ui/Dropdown.jsx';
 import AutoTextarea from '../ui/AutoTextarea.jsx';
 import ClassInput from '../ui/ClassInput.jsx';
-import CodeEditor from '../ui/CodeEditor.jsx';
 import StyleEditor, { collapseDeclarations } from '../ui/StyleEditor.jsx';
 import ExprInput from '../ui/ExprInput.jsx';
 import RichContent, { isInlineOnly } from '../ui/RichContent.jsx';
@@ -27,22 +26,37 @@ import {
   TagIcon,
   ElementImageIcon,
 } from '../ui/Icons.jsx';
+import type { AstroNode, PropValue } from '../types/ast';
+import type { PropField as PropFieldSpec } from '../types/ipc';
+import type { LinkContext, LoopContext } from '../store/selectors';
+import type { LoopRename } from '../model/loops';
+import { useAppStore } from '../store/index';
+import {
+  selectSelectedNode,
+  selectCurrentLayoutName,
+  selectSelectedSchema,
+  selectSlotOptions,
+  selectAllowAttrs,
+  selectLinkContext,
+  selectLoopContext,
+} from '../store/selectors';
+
+interface PropsPanelProps {
+  onChangeLayout?: (layoutName: string) => void;
+  onSetProp?: (propName: string, value: any, immediate?: boolean) => void;
+  onRenameProp?: (oldName: string, newName: string) => void;
+  onChangeTag?: (tag: string) => void;
+  onSetText?: (value: string, renames?: LoopRename[]) => void;
+  onSetContent?: (value: string) => void;
+  onSetInline?: (nodes: AstroNode[]) => void;
+  onOpenCode?: () => void;
+}
 
 // Edits the props of the selected node. Fields come from the component's
 // prop schema (interface Props / Astro.props destructure), plus any props
 // already set on the node that aren't in the schema.
 export default function PropsPanel({
-  node,
-  isLayout,
-  layouts,
-  currentLayoutName,
   onChangeLayout,
-  schema,
-  slotOptions,
-  projectClasses,
-  allowAttrs,
-  loopContext,
-  linkContext,
   onSetProp,
   onRenameProp,
   onChangeTag,
@@ -50,8 +64,19 @@ export default function PropsPanel({
   onSetContent,
   onSetInline,
   onOpenCode,
-  projectPath,
-}) {
+}: PropsPanelProps) {
+  const projectPath = useAppStore((s) => s.project?.path);
+  const node = useAppStore(selectSelectedNode);
+  const isLayout = useAppStore((s) => s.selectedId === 'layout');
+  const layouts = useAppStore((s) => s.scan.layouts);
+  const currentLayoutName = useAppStore(selectCurrentLayoutName);
+  const schema = useAppStore(selectSelectedSchema);
+  const slotOptions = useAppStore(selectSlotOptions);
+  const projectClasses = useAppStore((s) => s.projectClasses);
+  const allowAttrs = useAppStore(selectAllowAttrs);
+  const linkContext = useAppStore(selectLinkContext);
+  const loopContext = useAppStore(selectLoopContext);
+
   if (!node) {
     return (
       <div className="panel-section grow" style={{ flex: '1 1 50%' }}>
@@ -99,7 +124,7 @@ export default function PropsPanel({
             key={node.id}
             value={node.value}
             syncValue={node.value}
-            onCommit={(v) => v !== node.value && onSetText(v)}
+            onCommit={(v) => v !== node.value && onSetText?.(v)}
           />
         </div>
       </div>
@@ -136,7 +161,7 @@ export default function PropsPanel({
           <AutoTextarea
             minRows={3}
             value={node.value}
-            onChange={(e) => onSetText(e.target.value)}
+            onChange={(e) => onSetText?.(e.target.value)}
           />
         </div>
       </div>
@@ -161,7 +186,7 @@ export default function PropsPanel({
                 key={name}
                 field={{ name, type: 'other' }}
                 value={node.props[name]}
-                onChange={(v, immediate) => onSetProp(name, v, immediate)}
+                onChange={(v, immediate) => onSetProp?.(name, v, immediate)}
               />
             ))}
           </div>
@@ -196,7 +221,7 @@ export default function PropsPanel({
           <AutoTextarea
             minRows={3}
             value={node.value}
-            onChange={(e) => onSetText(e.target.value)}
+            onChange={(e) => onSetText?.(e.target.value)}
           />
         </div>
       </div>
@@ -217,7 +242,7 @@ export default function PropsPanel({
   );
   // With a free-form Attributes section, unknown attrs live there instead of
   // as individual fields — except class, which keeps its dedicated field.
-  let attrNames = [];
+  let attrNames: string[] = [];
   if (allowAttrs) {
     attrNames = extraProps.filter((k) => k !== 'class' && k !== 'slot');
     extraProps = extraProps.filter((k) => k === 'class' || k === 'slot');
@@ -262,6 +287,8 @@ export default function PropsPanel({
             </label>
             <Dropdown
               value={currentLayoutName}
+              className=""
+              placeholder=""
               options={[
                 // Keep an unresolvable wrapper (not one of the scanned layout
                 // files) selectable rather than showing an empty trigger.
@@ -270,7 +297,7 @@ export default function PropsPanel({
                   : []),
                 ...layouts.map((l) => ({ value: l.name, label: l.name })),
               ]}
-              onChange={(v) => onChangeLayout(v)}
+              onChange={(v) => onChangeLayout?.(v)}
             />
           </div>
         )}
@@ -284,7 +311,7 @@ export default function PropsPanel({
             </label>
             <RichContent
             key={node.id}
-            nodes={node.children}
+            nodes={node.children ?? []}
             exprOptions={exprSuggestions(loopContext || {})}
             onChange={onSetInline}
           />
@@ -300,24 +327,24 @@ export default function PropsPanel({
           <PropField
             key={field.name}
             field={field}
-            value={node.props[field.name]}
+            value={node.props?.[field.name]}
             slotOptions={slotOptions}
             projectClasses={projectClasses}
             assetCtx={{ projectPath, nodeName: node.name }}
             linkContext={linkContext}
-            onChange={(v, immediate) => onSetProp(field.name, v, immediate)}
+            onChange={(v, immediate) => onSetProp?.(field.name, v, immediate)}
           />
         ))}
         {extraProps.map((name) => (
           <PropField
             key={name}
             field={{ name, type: 'other' }}
-            value={node.props[name]}
+            value={node.props?.[name]}
             slotOptions={slotOptions}
             projectClasses={projectClasses}
             assetCtx={{ projectPath, nodeName: node.name }}
             linkContext={linkContext}
-            onChange={(v, immediate) => onSetProp(name, v, immediate)}
+            onChange={(v, immediate) => onSetProp?.(name, v, immediate)}
           />
         ))}
         {showSlotField && (
@@ -326,7 +353,7 @@ export default function PropsPanel({
             field={{ name: 'slot', type: 'slot' }}
             value={node.props?.slot}
             slotOptions={slotOptions}
-            onChange={(v, immediate) => onSetProp('slot', v, immediate)}
+            onChange={(v, immediate) => onSetProp?.('slot', v, immediate)}
           />
         )}
         {allowAttrs && (
@@ -354,11 +381,15 @@ export default function PropsPanel({
   );
 }
 
+// A bare attribute (`disabled`) has no value at all, so reading `.value` off
+// one has to come back undefined rather than fail to compile.
+const propValue = (v?: PropValue): string | undefined => (v && 'value' in v ? v.value : undefined);
+
 // Displayable text for an attribute value; '' means a bare attribute.
-const decodeAttr = (v) =>
+const decodeAttr = (v?: PropValue) =>
   v == null || v.type === 'bare' ? '' : v.type === 'expr' ? `{${v.value}}` : String(v.value);
 // Inverse: '' → bare, "{...}" → expression, anything else → string.
-const encodeAttr = (text) => {
+const encodeAttr = (text: string): PropValue => {
   if (text === '') return { type: 'bare' };
   const m = text.match(/^\{([\s\S]*)\}$/);
   if (m) return { type: 'expr', value: m[1].trim() };
@@ -367,11 +398,35 @@ const encodeAttr = (text) => {
 
 // Free-form attribute list for elements and ...rest components: + adds,
 // hover-trash deletes, clicking a row opens a name/value editor.
-function AttributesSection({ node, names, projectPath, onSetProp, onRenameProp }) {
-  const [editor, setEditor] = useState(null); // {attr: string|null, top}
-  const listRef = useRef(null);
+interface PopoverPos {
+  top: number;
+  left: number;
+  width: number;
+}
 
-  const openEditor = (attr) => {
+interface AttrEditorPos extends PopoverPos {
+  attr: string | null;
+}
+
+interface AttributesSectionProps {
+  node: AstroNode;
+  names: string[];
+  projectPath?: string;
+  onSetProp?: (name: string, value: PropValue | undefined, immediate?: boolean) => void;
+  onRenameProp?: (oldName: string, newName: string) => void;
+}
+
+function AttributesSection({
+  node,
+  names,
+  projectPath,
+  onSetProp,
+  onRenameProp,
+}: AttributesSectionProps) {
+  const [editor, setEditor] = useState<AttrEditorPos | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const openEditor = (attr: string | null) => {
     const rect = listRef.current?.getBoundingClientRect();
     setEditor({
       attr,
@@ -404,14 +459,14 @@ function AttributesSection({ node, names, projectPath, onSetProp, onRenameProp }
             >
               <span className="attr-name">{name}</span>
               <span className="attr-eq">=</span>
-              <span className="attr-value">{decodeAttr(node.props[name])}</span>
+              <span className="attr-value">{decodeAttr(node.props?.[name])}</span>
               <button
                 className="row-action"
                 title="Delete attribute"
                 onClick={(e) => {
                   e.stopPropagation();
                   if (editor?.attr === name) setEditor(null);
-                  onSetProp(name, undefined, true);
+                  onSetProp?.(name, undefined, true);
                 }}
               >
                 <TrashIcon size={12} />
@@ -427,7 +482,7 @@ function AttributesSection({ node, names, projectPath, onSetProp, onRenameProp }
           pos={editor}
           projectPath={projectPath}
           name={editor.attr ?? ''}
-          value={editor.attr ? decodeAttr(node.props[editor.attr]) : ''}
+          value={editor.attr ? decodeAttr(node.props?.[editor.attr]) : ''}
           isNew={editor.attr === null}
           existingNames={names}
           onCommitName={(newName) => {
@@ -435,16 +490,16 @@ function AttributesSection({ node, names, projectPath, onSetProp, onRenameProp }
             if (editor.attr === null) {
               // New attribute: created once a valid name exists.
               if (clean && !node.props?.[clean]) {
-                onSetProp(clean, { type: 'bare' }, true);
-                setEditor((e) => ({ ...e, attr: clean }));
+                onSetProp?.(clean, { type: 'bare' }, true);
+                setEditor((e) => (e ? { ...e, attr: clean } : e));
               }
             } else if (clean && clean !== editor.attr) {
-              onRenameProp(editor.attr, clean);
-              setEditor((e) => ({ ...e, attr: clean }));
+              onRenameProp?.(editor.attr, clean);
+              setEditor((e) => (e ? { ...e, attr: clean } : e));
             }
           }}
           onChangeValue={(text) => {
-            if (editor.attr) onSetProp(editor.attr, encodeAttr(text));
+            if (editor.attr) onSetProp?.(editor.attr, encodeAttr(text));
           }}
           onClose={() => setEditor(null)}
         />
@@ -454,10 +509,31 @@ function AttributesSection({ node, names, projectPath, onSetProp, onRenameProp }
 }
 
 // Floating name/value editor for one attribute.
-function AttrEditor({ pos, name, value, isNew, projectPath, onCommitName, onChangeValue, onClose }) {
+interface AttrEditorProps {
+  pos: PopoverPos;
+  name: string;
+  value: string;
+  isNew: boolean;
+  projectPath?: string;
+  existingNames?: string[];
+  onCommitName: (name: string) => void;
+  onChangeValue: (text: string) => void;
+  onClose: () => void;
+}
+
+function AttrEditor({
+  pos,
+  name,
+  value,
+  isNew,
+  projectPath,
+  onCommitName,
+  onChangeValue,
+  onClose,
+}: AttrEditorProps) {
   const [draftName, setDraftName] = useState(name);
   const [draftValue, setDraftValue] = useState(value);
-  const ref = useRef(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   // Whether the value is an {expression} is settled when the popover opens,
   // so the field can't change shape halfway through typing one. The name is
@@ -483,10 +559,10 @@ function AttrEditor({ pos, name, value, isNew, projectPath, onCommitName, onChan
   const focusValue = !isNew && !mounted.current;
 
   useEffect(() => {
-    const onDown = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
-    const onKey = (e) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('mousedown', onDown);
@@ -577,14 +653,19 @@ function AttrEditor({ pos, name, value, isNew, projectPath, onCommitName, onChan
 // Shallow object literal ({ id: "x", tabindex: 3 }) ↔ ordered entries.
 // Returns null for nesting/spreads the row editor can't represent (the
 // caller falls back to the generic expression field).
-function parseObjectLiteral(src) {
+interface ObjectEntry {
+  key: string;
+  raw: string;
+}
+
+function parseObjectLiteral(src: unknown): ObjectEntry[] | null {
   const t = String(src ?? '').trim();
   const m = t.match(/^\{([\s\S]*)\}$/);
   if (!m) return t === '' ? [] : null;
   const inner = m[1].trim();
   if (!inner) return [];
   if (/[{}]|\.\.\./.test(inner)) return null;
-  const entries = [];
+  const entries: ObjectEntry[] = [];
   const re =
     /\s*(?:"([^"]*)"|'([^']*)'|([\w$@:.-]+))\s*:\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|[^,]+?)\s*(?:,|$)/y;
   let pos = 0;
@@ -598,7 +679,7 @@ function parseObjectLiteral(src) {
   return entries;
 }
 
-function serializeObjectLiteral(entries) {
+function serializeObjectLiteral(entries: ObjectEntry[]) {
   const body = entries
     .map((e) => `${/^[A-Za-z_$][\w$]*$/.test(e.key) ? e.key : JSON.stringify(e.key)}: ${e.raw}`)
     .join(', ');
@@ -607,12 +688,12 @@ function serializeObjectLiteral(entries) {
 
 // Row display/edit encoding: quoted strings edit as plain text, anything
 // else as {expression}; an empty value means `true`.
-const decodeRaw = (raw) => {
+const decodeRaw = (raw: string) => {
   const m = String(raw).match(/^"((?:[^"\\]|\\.)*)"$|^'((?:[^'\\]|\\.)*)'$/);
   if (m) return (m[1] ?? m[2]).replace(/\\(.)/g, '$1');
   return raw === 'true' ? '' : `{${raw}}`;
 };
-const encodeRaw = (text) => {
+const encodeRaw = (text: string) => {
   if (text === '') return 'true';
   const m = text.match(/^\{([\s\S]*)\}$/);
   if (m) return m[1].trim() || 'true';
@@ -622,11 +703,22 @@ const encodeRaw = (text) => {
 // Attributes-object props (containerAttrs = {} etc.): entries edit like
 // element attributes and serialize back to a shallow { key: value } literal.
 // Removing the last row resets the prop to its default.
-function ObjectAttrsField({ pill, menu, entries, onCommit }) {
-  const [editor, setEditor] = useState(null); // {index: number|null, top, left, width}
-  const listRef = useRef(null);
+interface RowEditorPos extends PopoverPos {
+  index: number | null;
+}
 
-  const openEditor = (index) => {
+interface ObjectAttrsFieldProps {
+  pill: React.ReactNode;
+  menu: React.ReactNode;
+  entries: ObjectEntry[];
+  onCommit: (entries: ObjectEntry[] | null, immediate?: boolean) => void;
+}
+
+function ObjectAttrsField({ pill, menu, entries, onCommit }: ObjectAttrsFieldProps) {
+  const [editor, setEditor] = useState<RowEditorPos | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const openEditor = (index: number | null) => {
     const rect = listRef.current?.getBoundingClientRect();
     setEditor({
       index,
@@ -678,7 +770,7 @@ function ObjectAttrsField({ pill, menu, entries, onCommit }) {
         <AttrEditor
           key={editor.index ?? '__new'}
           pos={editor}
-          projectPath={projectPath}
+          projectPath={undefined}
           name={editor.index != null ? entries[editor.index]?.key ?? '' : ''}
           value={editor.index != null ? decodeRaw(entries[editor.index]?.raw ?? '') : ''}
           isNew={editor.index == null}
@@ -688,7 +780,7 @@ function ObjectAttrsField({ pill, menu, entries, onCommit }) {
             if (editor.index == null) {
               if (entries.some((en) => en.key === clean)) return;
               onCommit([...entries, { key: clean, raw: 'true' }]);
-              setEditor((ed) => ({ ...ed, index: entries.length }));
+              setEditor((ed) => (ed ? { ...ed, index: entries.length } : ed));
             } else if (clean !== entries[editor.index].key) {
               onCommit(entries.map((en, i) => (i === editor.index ? { ...en, key: clean } : en)));
             }
@@ -711,7 +803,13 @@ function ObjectAttrsField({ pill, menu, entries, onCommit }) {
 // `items.filter(i => i.on).map((item, index) => (` into friendly fields.
 // The data part is any expression, so filtered/sorted collections still fit;
 // only destructured params or non-arrow callbacks fall back to code.
-function parseMapHead(head) {
+interface MapFields {
+  data: string;
+  item: string;
+  index: string;
+}
+
+function parseMapHead(head: string): MapFields | null {
   const m = String(head)
     .trim()
     .match(/^([\s\S]+?)\.map\(\s*\(\s*([\w$]+)\s*(?:,\s*([\w$]+)\s*)?\)\s*=>\s*\($/);
@@ -728,7 +826,13 @@ const NO_SOURCE = '[]';
 const CUSTOM_SOURCE = '__custom__'; // not a valid expression, so it can't collide
 const DEFAULT_ITEM = 'item'; // a value no expression can collide with
 
-function MapEditor({ node, loopContext, onSetText }) {
+interface MapEditorProps {
+  node: Extract<AstroNode, { kind: 'map' }>;
+  loopContext: LoopContext | null;
+  onSetText?: (value: string, renames?: LoopRename[]) => void;
+}
+
+function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
   const parsed = parseMapHead(node.head);
   const [fields, setFields] = useState(parsed || { data: '', item: '', index: '' });
   const lastBuiltRef = useRef(node.head);
@@ -741,7 +845,7 @@ function MapEditor({ node, loopContext, onSetText }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(loopContext || {})]
   );
-  const isCustomData = (data) => {
+  const isCustomData = (data: string) => {
     const d = (data || '').trim();
     return !!d && d !== NO_SOURCE && !sources.some((s) => s.insert === d);
   };
@@ -762,8 +866,8 @@ function MapEditor({ node, loopContext, onSetText }) {
 
   // Typing only updates local state; the head is written on blur/Enter/pick
   // so half-typed values never run in the preview.
-  const update = (patch) => setFields((f) => ({ ...f, ...patch }));
-  const commit = (next) => {
+  const update = (patch: Partial<MapFields>) => setFields((f) => ({ ...f, ...patch }));
+  const commit = (next: MapFields) => {
     setFields(next);
     const itemOk = IDENT_RE.test(next.item);
     const indexOk = !next.index || IDENT_RE.test(next.index);
@@ -774,7 +878,7 @@ function MapEditor({ node, loopContext, onSetText }) {
     // reference it. Only a rename counts — adding or removing an index
     // leaves nothing to point the old name at.
     const prev = parseMapHead(node.head);
-    const renames = [];
+    const renames: LoopRename[] = [];
     if (prev) {
       if (prev.item && next.item && prev.item !== next.item) {
         renames.push({ from: prev.item, to: next.item });
@@ -784,16 +888,16 @@ function MapEditor({ node, loopContext, onSetText }) {
       }
     }
     lastBuiltRef.current = head;
-    onSetText(head, renames);
+    onSetText?.(head, renames);
   };
-  const commitOnEnter = (e) => {
+  const commitOnEnter = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') commit(fields);
   };
 
   // Changing the source changes what the item *is*, so a name describing the
   // old data ("service" for a list of projects) is worse than none. Back to
   // the default; the rename above carries the children with it.
-  const commitSource = (data) => {
+  const commitSource = (data: string) => {
     const changed = (parseMapHead(node.head)?.data || '') !== data.trim();
     commit({ ...fields, data, item: changed ? DEFAULT_ITEM : fields.item });
   };
@@ -814,6 +918,7 @@ function MapEditor({ node, loopContext, onSetText }) {
             <Dropdown
               livePreview={false}
               className={`dd-source ${custom || !isNoSource ? 'on' : ''}`}
+              placeholder=""
               value={custom ? CUSTOM_SOURCE : isNoSource ? '' : fields.data.trim()}
               options={[
                 { value: '', label: 'None' },
@@ -893,7 +998,7 @@ function MapEditor({ node, loopContext, onSetText }) {
         <ExprInput
           value={node.head}
           syncValue={node.head}
-          onCommit={(v) => v !== node.head && onSetText(v)}
+          onCommit={(v) => v !== node.head && onSetText?.(v)}
         />
       </div>
     </>
@@ -903,13 +1008,20 @@ function MapEditor({ node, loopContext, onSetText }) {
 // Tag switcher for plain elements: free text with a suggestion list of
 // standard HTML tags. Committing renames the element — the navigator icon
 // follows the tag, and attributes invalid for the new tag are dropped.
-function TagField({ tag, onChangeTag }) {
+interface TagFieldProps {
+  tag: string;
+  onChangeTag?: (tag: string) => void;
+}
+
+function TagField({ tag, onChangeTag }: TagFieldProps) {
   const [draft, setDraft] = useState(tag);
   const [focused, setFocused] = useState(false);
   const [highlight, setHighlight] = useState(0);
-  const [popupPos, setPopupPos] = useState(null);
-  const wrapRef = useRef(null);
-  const inputRef = useRef(null);
+  const [popupPos, setPopupPos] = useState<{ left: number; top: number; width: number } | null>(
+    null
+  );
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => setDraft(tag), [tag]);
 
   const q = draft.trim().toLowerCase();
@@ -933,13 +1045,13 @@ function TagField({ tag, onChangeTag }) {
     setPopupPos({ left: r.left, top: r.bottom + 4, width: r.width });
   }, [matches.length, draft]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const commit = (t) => {
+  const commit = (t: string) => {
     const clean = String(t).trim().toLowerCase();
-    if (/^[a-z][a-z0-9-]*$/.test(clean) && clean !== tag) onChangeTag(clean);
+    if (/^[a-z][a-z0-9-]*$/.test(clean) && clean !== tag) onChangeTag?.(clean);
     else setDraft(tag);
   };
 
-  const onKeyDown = (e) => {
+  const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown' && matches.length) {
       e.preventDefault();
       setHighlight((h) => Math.min(h + 1, matches.length - 1));
@@ -1008,17 +1120,35 @@ function TagField({ tag, onChangeTag }) {
   );
 }
 
-function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkContext, onChange }) {
+interface PropFieldProps {
+  field: PropFieldSpec & { options?: string[]; default?: unknown };
+  value?: PropValue;
+  slotOptions?: string[] | null;
+  projectClasses?: string[];
+  assetCtx?: { projectPath?: string; nodeName?: string };
+  linkContext?: LinkContext;
+  onChange: (value: PropValue | undefined, immediate?: boolean) => void;
+}
+
+function PropField({
+  field,
+  value,
+  slotOptions,
+  projectClasses,
+  assetCtx,
+  linkContext,
+  onChange,
+}: PropFieldProps) {
   const { name, type } = field;
   const isSet = value !== undefined;
-  const [menuPos, setMenuPos] = useState(null);
+  const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
 
   const reset = () => {
     setMenuPos(null);
     onChange(undefined, true);
   };
 
-  const onLabelClick = (e) => {
+  const onLabelClick = (e: React.MouseEvent) => {
     if (!isSet) return;
     if (e.altKey) {
       reset();
@@ -1070,7 +1200,7 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
           menu={menu}
           entries={entries}
           onCommit={(next) =>
-            next.length
+            next && next.length
               ? onChange({ type: 'expr', value: serializeObjectLiteral(next) }, true)
               : onChange(undefined, true)
           }
@@ -1092,7 +1222,7 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
       <div className="props-field">
         {label}
         <ClassInput
-          value={value?.value || ''}
+          value={propValue(value) || ''}
           suggestions={projectClasses || []}
           onChange={(v, immediate) =>
             v.trim()
@@ -1107,7 +1237,7 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
   // The slot attribute picks which of the parent component's slots this node
   // fills. Unset = the default slot.
   if (name === 'slot' && Array.isArray(slotOptions) && slotOptions.length) {
-    const raw = value?.value;
+    const raw = propValue(value);
     const named = slotOptions.filter((s) => s !== 'default');
     // Keep an out-of-list current value selectable rather than losing it.
     const opts = [
@@ -1121,7 +1251,9 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
         <Dropdown
           value={raw && raw !== 'default' ? raw : ''}
           options={opts}
-          onChange={(v) =>
+          className=""
+          placeholder=""
+          onChange={(v: any) =>
             v === ''
               ? onChange(undefined, true)
               : onChange({ type: 'string', value: v }, true)
@@ -1133,7 +1265,7 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
 
   if (type === 'enum' && field.options?.length) {
     const defaultStr = field.default !== undefined ? String(field.default) : undefined;
-    const raw = value?.value;
+    const raw = propValue(value);
     // The default option is encoded as '' (= prop not set), so an unset prop
     // shows its default as the selected option and picking the default
     // resets the prop rather than writing it out explicitly.
@@ -1149,8 +1281,9 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
         <Dropdown
           value={cur}
           placeholder="(not set)"
-          options={opts.map((o) => ({ value: o === defaultStr ? '' : o, label: o }))}
-          onChange={(v) =>
+          options={opts.map((o: any) => ({ value: o === defaultStr ? '' : o, label: o }))}
+          className=""
+          onChange={(v: any) =>
             v === ''
               ? onChange(undefined, true)
               : onChange({ type: 'string', value: v }, true)
@@ -1177,17 +1310,17 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
   }
 
   if (type === 'number') {
-    const num = value?.type === 'expr' ? value.value : value?.value ?? '';
+    const num = value?.type === 'expr' ? value.value : propValue(value) ?? '';
     // Shift+arrow steps by 10, Option/Alt+arrow by 0.1; plain arrows keep
     // the input's native ±1 stepping.
-    const onStepKey = (e) => {
+    const onStepKey = (e: any) => {
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
       if (!e.shiftKey && !e.altKey) return;
       e.preventDefault();
       const step = e.shiftKey ? 10 : 0.1;
       const dir = e.key === 'ArrowUp' ? 1 : -1;
       const cur = parseFloat(e.target.value);
-      const base = Number.isFinite(cur) ? cur : parseFloat(field.default) || 0;
+      const base = Number.isFinite(cur) ? cur : parseFloat(String(field.default)) || 0;
       // Round away float noise (e.g. 38.1 + 0.1 = 38.199999…).
       const next = Math.round((base + dir * step) * 1e6) / 1e6;
       onChange({ type: 'expr', value: String(next) });
@@ -1212,7 +1345,7 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
   }
 
   // string / other
-  const str = value ? value.value : '';
+  const str = propValue(value) ?? '';
   const isExpr = value?.type === 'expr';
 
   // href gets the Webflow-style link settings: URL / page / section / email /
@@ -1276,7 +1409,8 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
         <AutoTextarea
           value={str}
           placeholder={field.default !== undefined ? String(field.default) : ''}
-          onChange={(e) => onChange({ type: 'string', value: e.target.value })}
+          style={undefined}
+          onChange={(e: any) => onChange({ type: 'string', value: e.target.value })}
         />
       ) : (
         <input
@@ -1294,18 +1428,24 @@ function PropField({ field, value, slotOptions, projectClasses, assetCtx, linkCo
 }
 
 // Small fixed-position menu opened by clicking a set prop's label.
-function ResetMenu({ pos, onReset, onClose }) {
-  const ref = useRef(null);
+interface ResetMenuProps {
+  pos: { left: number; top: number };
+  onReset: () => void;
+  onClose: () => void;
+}
+
+function ResetMenu({ pos, onReset, onClose }: ResetMenuProps) {
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const onDown = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
-    const onKey = (e) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    const onScroll = (e) => {
-      if (ref.current && ref.current.contains(e.target)) return;
+    const onScroll = (e: Event) => {
+      if (ref.current && ref.current.contains(e.target as Node)) return;
       onClose();
     };
     document.addEventListener('mousedown', onDown);

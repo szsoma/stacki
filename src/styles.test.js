@@ -9,6 +9,7 @@ const styles = readFileSync(
   'utf8',
 );
 
+/** @param {string} selector */
 function declarationsFor(selector) {
   const match = styles.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`));
   if (!match) throw new Error(`Missing CSS rule for ${selector}`);

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 // Interactive WebGL backdrop for the start screen: a shader-drawn wave that
 // bends around the cursor. Mouse movement injects velocity into a 64x64
 // field, which is blurred, decayed, and uploaded as a texture the shader

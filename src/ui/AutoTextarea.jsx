@@ -1,9 +1,14 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useLayoutEffect, useRef } from 'react';
 
 // Textarea that grows and shrinks to fit its content. Height tracks the
 // value on every change (and on width changes via ResizeObserver, since
 // wrapping depends on width).
+/**
+ * @param {{ minRows?: number } & React.TextareaHTMLAttributes<HTMLTextAreaElement>} props
+ */
 export default function AutoTextarea({ value, minRows = 2, style, ...props }) {
+  /** @type {React.RefObject<HTMLTextAreaElement | null>} */
   const ref = useRef(null);
 
   const fit = () => {

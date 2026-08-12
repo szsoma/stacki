@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React from 'react';
 
 // Freeform canvas: the page rendered at every breakpoint side by side on a

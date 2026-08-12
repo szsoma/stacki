@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { HTML_TAGS } from '../elementSchemas.js';
 import {

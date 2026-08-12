@@ -13,6 +13,7 @@
 const LOCATION_RE = /((?:[\w-]+\/)+[\w-]+\.(?:astro|jsx?|tsx?|css|mjs|cjs|json)):(\d+)/;
 const MAX_ENTRIES = 20;
 
+/** @param {string} rawLog */
 export function parseDevLogEntries(rawLog) {
   const text = String(rawLog || '').trim();
   if (!text) return [];

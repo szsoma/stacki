@@ -13,6 +13,12 @@ const renameIdent = (code: string, from: string, to: string): string =>
 const renameInBraces = (text: string, from: string, to: string): string =>
   String(text ?? '').replace(/\{([^{}]*)\}/g, (_, inner) => `{${renameIdent(inner, from, to)}}`);
 
+/** A loop variable being renamed, and what it becomes. */
+export interface LoopRename {
+  from: string;
+  to: string;
+}
+
 export function renameLoopVar(nodes: AstroNode[], from: string, to: string): void {
   for (const n of nodes) {
     if (n.kind === 'map') {

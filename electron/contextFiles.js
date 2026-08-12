@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 const nodeFs = require('fs');
 const nodePath = require('path');
 

@@ -1,3 +1,4 @@
+// @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 // "Choose an asset" requests, from a field to the Assets panel.
 //
 // The fields that ask (src, poster, an attribute value) sit several levels
