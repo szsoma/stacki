@@ -234,6 +234,7 @@ export default function PreviewPane({
 
   const hoverPath = navHoverPath || canvasHover;
   const hoverOccUsed = navHoverPath ? null : hoverOcc;
+  const componentEdit = Boolean(activeScope && pageScope && activeScope !== pageScope);
 
   const model = useAppStore(selectModel);
   const hiddenNodes = useAppStore((s) => s.hiddenNodes);
@@ -472,7 +473,7 @@ export default function PreviewPane({
                   return list.map((r, i) => (
                     <div
                       key={`${o!.type}-${i}`}
-                      className={`node-outline ${o!.type} ${info.kind}${info.bound ? ' bound' : ''}`}
+                      className={`node-outline ${o!.type} ${info.kind}${info.bound ? ' bound' : ''}${componentEdit ? ' component-edit' : ''}`}
                       style={{ left: r.x, top: r.y, width: r.w, height: r.h }}
                     >
                       <span className={`node-outline-tag ${r.y < 20 ? 'inside' : ''}`}>

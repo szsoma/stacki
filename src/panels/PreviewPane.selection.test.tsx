@@ -151,6 +151,41 @@ describe('PreviewPane scoped selection protocol', () => {
     });
   });
 
+  it('marks selected and hovered outlines only while editing a component scope', () => {
+    const { container, getByTitle, rerender } = render(<PreviewPane {...baseProps} />);
+    const frame = getByTitle('Site preview') as HTMLIFrameElement;
+    send(frame, {
+      type: 'avb:rects',
+      rects: {
+        '0.0': [{ x: 1, y: 2, w: 30, h: 40 }],
+        '0.1': [{ x: 5, y: 6, w: 20, h: 25 }],
+      },
+      focusRects: [],
+    });
+    send(frame, {
+      type: 'avb:hover-node', scope: baseProps.activeScope, path: '0.1', pagePath: '0.3', occurrence: 0,
+    });
+
+    expect(container.querySelector('.node-outline.sel')).toHaveClass('component-edit');
+    expect(container.querySelector('.node-outline.hover')).toHaveClass('component-edit');
+
+    rerender(<PreviewPane {...baseProps} activeScope={baseProps.pageScope} />);
+    send(frame, {
+      type: 'avb:rects',
+      rects: {
+        '0.0': [{ x: 1, y: 2, w: 30, h: 40 }],
+        '0.1': [{ x: 5, y: 6, w: 20, h: 25 }],
+      },
+      focusRects: [],
+    });
+    send(frame, {
+      type: 'avb:hover-node', scope: baseProps.pageScope, path: '0.1', pagePath: '0.1', occurrence: 0,
+    });
+
+    expect(container.querySelector('.node-outline.sel')).not.toHaveClass('component-edit');
+    expect(container.querySelector('.node-outline.hover')).not.toHaveClass('component-edit');
+  });
+
   it('clears rect and hover state when the active scope changes', () => {
     const { container, getByTitle, rerender } = render(<PreviewPane {...baseProps} selPath={null} />);
     const frame = getByTitle('Site preview') as HTMLIFrameElement;

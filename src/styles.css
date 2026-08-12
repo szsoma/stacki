@@ -2721,6 +2721,11 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
 .node-outline.hover.map .node-outline-tag,
 .node-outline.hover.bound .node-outline-tag { color: #a78bfa; }
 
+.node-outline.component-edit { outline-color: var(--accent); }
+.node-outline.component-edit .node-outline-tag { background: var(--accent); color: white; }
+.node-outline.component-edit.hover { background: transparent; }
+.node-outline.component-edit.hover .node-outline-tag { background: transparent; color: var(--accent); }
+
 /* Git panel: a failed action (a refused branch switch, above all) stays put
    until dismissed — you must not keep editing believing you switched. */
 .git-error {
