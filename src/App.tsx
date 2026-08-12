@@ -7,6 +7,7 @@ import StructurePanel from './panels/StructurePanel.tsx';
 import PropsPanel from './panels/PropsPanel.tsx';
 import StylePanel from './panels/StylePanel.tsx';
 import PreviewPane from './panels/PreviewPane.tsx';
+import type { PreviewNodeHit } from './panels/PreviewPane.tsx';
 import GitChip from './panels/GitChip.jsx';
 import LeftRail from './ui/LeftRail.jsx';
 import CodeWindow from './ui/CodeWindow.jsx';
@@ -80,6 +81,7 @@ import {
   nodeAtPath,
   pathOfNode,
 } from './model/nodes.ts';
+import { toPreviewScope } from './model/previewScope.ts';
 import type { AstroNode, PageModel, Props, PropValue } from './types/ast';
 import type { PageEntry, PropField } from './types/ipc';
 import type { LeftTab, RightTab } from './store/uiSlice';
@@ -410,9 +412,7 @@ export default function App() {
         focusPath: focusPath ?? undefined,
       };
       const prev = s().editStack;
-      s().setEditStack(
-        prev.some((e) => e.path === comp.path) ? prev : [...prev, entry]
-      );
+      s().setEditStack([...prev, entry]);
       await openFile(entry);
     },
     [s, scan.components, scan.layouts, openFile, showToast]
@@ -1745,6 +1745,8 @@ export default function App() {
   const pageEntry = editStack[0] || currentPage;
   const pageRoute = pageEntry?.route;
   const focusPath = currentPage?.kind === 'component' ? currentPage.focusPath : null;
+  const pageScope = toPreviewScope(pageEntry?.path ?? null, project.path);
+  const activeScope = toPreviewScope(currentPage?.path ?? null, project.path);
   const liveUrl = devUrl && pageRoute ? devUrl + pageRoute : null;
 
   return (
@@ -1906,30 +1908,38 @@ export default function App() {
             onRestart={() => startPreview(project.path)}
             selPath={pathFor(selectedId)}
             navHoverPath={pathFor(hoverNodeId)}
+            activeScope={activeScope}
+            pageScope={pageScope}
             overlayInfo={overlayInfo}
             focusPath={focusPath}
             onDevice={(d) => s().setDevice(d as PreviewDevice)}
-            onSelectPath={(p) => {
-              if (focusPath) {
-                const inside = p && (p === focusPath || p.startsWith(focusPath + '.'));
-                if (!inside) closeComponent();
-                return;
-              }
-              if (!p) {
+            onSelectNode={(hit: PreviewNodeHit) => {
+              if (currentPage?.kind === 'component') {
+                const inside = !!focusPath && !!hit.pagePath &&
+                  (hit.pagePath === focusPath || hit.pagePath.startsWith(focusPath + '.'));
+                if (!inside) {
+                  closeComponent();
+                  return;
+                }
+                if (hit.scope !== activeScope || !hit.path) return;
+              } else if (!hit.path) {
                 const layout = model && findNodeById(model.nodes, 'layout');
                 if (layout) {
-                  s().select(layout.id, { reveal: true });
+                  s().select(layout.id, { reveal: s().leftTab !== 'terminal' });
                 }
                 return;
-              }
-              const n = model && nodeAtPath(model.nodes, p.split('.').map(Number));
+              } else if (hit.scope !== activeScope) return;
+
+              const n = model && hit.path &&
+                nodeAtPath(model.nodes, hit.path.split('.').map(Number));
               if (n) {
-                s().select(n.id, { reveal: true });
+                s().select(n.id, { reveal: s().leftTab !== 'terminal' });
               }
             }}
-            onOpenPath={(p) => {
-              const n = model && nodeAtPath(model.nodes, p.split('.').map(Number));
-              if (n?.kind === 'component') openComponent(n.name, p);
+            onOpenNode={(hit: PreviewNodeHit) => {
+              if (hit.scope !== activeScope || !hit.path) return;
+              const n = model && nodeAtPath(model.nodes, hit.path.split('.').map(Number));
+              if (n?.kind === 'component') openComponent(n.name, hit.path);
             }}
             onFrameMounted={(ref) => { previewFrameRef.current = ref; }}
           />

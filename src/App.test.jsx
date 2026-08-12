@@ -10,6 +10,7 @@ const harness = vi.hoisted(() => ({
   menu: new Map(),
   openProject: null,
   terminalPanelProps: null,
+  previewPaneProps: null,
 }));
 
 // jsdom has no ResizeObserver. Only exercised once a page is actually open
@@ -62,11 +63,14 @@ vi.mock('./panels/TerminalPanel.jsx', () => ({
 }));
 
 vi.mock('./panels/PreviewPane.tsx', () => ({
-  default: () => (
-    <div className="preview-frame-wrap">
-      <iframe title="Design preview" />
-    </div>
-  ),
+  default: (props) => {
+    harness.previewPaneProps = props;
+    return (
+      <div className="preview-frame-wrap">
+        <iframe title="Design preview" />
+      </div>
+    );
+  },
 }));
 
 vi.mock('./panels/GitChip.jsx', () => ({
@@ -101,7 +105,75 @@ function setupAvb() {
       external: false,
     })),
     watchProject: vi.fn(),
+    writePage: vi.fn(async () => {}),
+    writePageRaw: vi.fn(async () => {}),
   };
+}
+
+function setupSelectablePage() {
+  const section = {
+    id: 'section-1',
+    kind: 'element',
+    name: 'section',
+    props: {},
+    children: [],
+  };
+  window.avb.scanProject.mockResolvedValue({
+    pages: [{ path: '/projects/one/src/pages/index.astro', name: 'index.astro', route: '/' }],
+    layouts: [],
+    components: [],
+  });
+  window.avb.readPage.mockResolvedValue({
+    editable: true,
+    model: { imports: [], extraFrontmatter: '', nodes: [section] },
+    source: '<section></section>',
+  });
+}
+
+function setupComponentPage() {
+  const pagePath = '/projects/one/src/pages/index.astro';
+  const aboutPath = '/projects/one/src/components/About.astro';
+  const cardPath = '/projects/one/src/components/Card.astro';
+  const models = new Map([
+    [pagePath, {
+      imports: [],
+      extraFrontmatter: '',
+      nodes: [{ id: 'about-host', kind: 'component', name: 'About', props: {}, children: [] }],
+    }],
+    [aboutPath, {
+      imports: [],
+      extraFrontmatter: '',
+      nodes: [{
+        id: 'about-section', kind: 'element', name: 'section', props: {}, children: [
+          { id: 'about-heading', kind: 'element', name: 'h2', props: {}, children: [] },
+          { id: 'card-host', kind: 'component', name: 'Card', props: {}, children: [] },
+        ],
+      }],
+    }],
+    [cardPath, {
+      imports: [],
+      extraFrontmatter: '',
+      nodes: [{
+        id: 'card-article', kind: 'element', name: 'article', props: {}, children: [
+          { id: 'nested-about-host', kind: 'component', name: 'About', props: {}, children: [] },
+        ],
+      }],
+    }],
+  ]);
+
+  window.avb.scanProject.mockResolvedValue({
+    pages: [{ path: pagePath, name: 'index.astro', route: '/' }],
+    layouts: [],
+    components: [
+      { path: aboutPath, name: 'About' },
+      { path: cardPath, name: 'Card' },
+    ],
+  });
+  window.avb.readPage.mockImplementation(async (path) => ({
+    editable: true,
+    model: models.get(path),
+    source: '',
+  }));
 }
 
 async function openProject() {
@@ -126,6 +198,7 @@ describe('App terminal integration', () => {
     harness.menu.clear();
     harness.openProject = null;
     harness.terminalPanelProps = null;
+    harness.previewPaneProps = null;
     setupAvb();
   });
 
@@ -180,6 +253,220 @@ describe('App terminal integration', () => {
     const secondPanel = screen.getByLabelText('Terminal panel integration');
     expect(secondPanel).not.toBe(firstPanel);
     expect(secondPanel.hidden).toBe(false);
+  });
+
+  it('keeps Terminal visible when an element is selected from the design canvas', async () => {
+    setupSelectablePage();
+
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onSelectNode).toEqual(expect.any(Function)));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Terminal' }));
+    const terminalPanel = screen.getByLabelText('Terminal panel integration');
+    expect(terminalPanel.hidden).toBe(false);
+
+    act(() => harness.previewPaneProps.onSelectNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+
+    await waitFor(() => {
+      expect(harness.terminalPanelProps.editorContext.selectedNode).toMatchObject({ id: 'section-1' });
+    });
+    expect(terminalPanel.hidden).toBe(false);
+  });
+
+  it('keeps Terminal visible when the canvas fallback selects the page layout', async () => {
+    window.avb.scanProject.mockResolvedValue({
+      pages: [{ path: '/projects/one/src/pages/index.astro', name: 'index.astro', route: '/' }],
+      layouts: [],
+      components: [],
+    });
+    window.avb.readPage.mockResolvedValue({
+      editable: true,
+      model: {
+        imports: [{ name: 'BaseLayout', path: '../layouts/BaseLayout.astro' }],
+        extraFrontmatter: '',
+        nodes: [{
+          id: 'layout',
+          kind: 'component',
+          name: 'BaseLayout',
+          props: {},
+          children: [],
+        }],
+      },
+      source: '',
+    });
+
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onSelectNode).toEqual(expect.any(Function)));
+    fireEvent.click(screen.getByRole('button', { name: 'Terminal' }));
+    const terminalPanel = screen.getByLabelText('Terminal panel integration');
+
+    act(() => harness.previewPaneProps.onSelectNode({
+      scope: 'src/pages/index.astro', path: null, pagePath: null, occurrence: 0,
+    }));
+
+    await waitFor(() => {
+      expect(harness.terminalPanelProps.editorContext.selectedNode).toMatchObject({ id: 'layout' });
+    });
+    expect(terminalPanel.hidden).toBe(false);
+  });
+
+  it('continues revealing Navigator for canvas selections outside Terminal', async () => {
+    setupSelectablePage();
+
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onSelectNode).toEqual(expect.any(Function)));
+    fireEvent.click(screen.getByRole('button', { name: 'Pages' }));
+
+    act(() => harness.previewPaneProps.onSelectNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-node-id="section-1"]')).toHaveClass('selected');
+    });
+    expect(screen.getByRole('button', { name: 'Navigator' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('opens component view with separate active and page scopes', async () => {
+    setupComponentPage();
+    await openProject();
+
+    await waitFor(() => expect(harness.previewPaneProps?.onOpenNode).toEqual(expect.any(Function)));
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+
+    await waitFor(() => {
+      expect(harness.previewPaneProps).toMatchObject({
+        activeScope: 'src/components/About.astro',
+        pageScope: 'src/pages/index.astro',
+        focusPath: '0',
+      });
+    });
+  });
+
+  it('selects component-local nodes without leaving Terminal or accepting page-host hits', async () => {
+    setupComponentPage();
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onOpenNode).toEqual(expect.any(Function)));
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Terminal' }));
+    const terminalPanel = screen.getByLabelText('Terminal panel integration');
+    act(() => harness.previewPaneProps.onSelectNode({
+      scope: 'src/components/About.astro', path: '0.0', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => {
+      expect(harness.terminalPanelProps.editorContext.selectedNode).toMatchObject({ id: 'about-heading' });
+    });
+    expect(terminalPanel.hidden).toBe(false);
+
+    act(() => harness.previewPaneProps.onSelectNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+    expect(harness.terminalPanelProps.editorContext.selectedNode).toMatchObject({ id: 'about-heading' });
+    expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro');
+
+    act(() => harness.previewPaneProps.onSelectNode({
+      scope: 'src/components/About.astro', path: '9', pagePath: '0', occurrence: 0,
+    }));
+    expect(harness.terminalPanelProps.editorContext.selectedNode).toMatchObject({ id: 'about-heading' });
+  });
+
+  it.each([
+    { scope: 'src/pages/index.astro', path: '1', pagePath: '1', occurrence: 0 },
+    { scope: null, path: null, pagePath: null, occurrence: 0 },
+  ])('returns to the page when a hit is outside the focused instance', async (outsideHit) => {
+    setupComponentPage();
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onOpenNode).toEqual(expect.any(Function)));
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro'));
+
+    act(() => harness.previewPaneProps.onSelectNode(outsideHit));
+
+    await waitFor(() => {
+      expect(harness.previewPaneProps).toMatchObject({
+        activeScope: 'src/pages/index.astro',
+        pageScope: 'src/pages/index.astro',
+        focusPath: null,
+      });
+    });
+  });
+
+  it('opens a nested component while retaining the outer page focus', async () => {
+    setupComponentPage();
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onOpenNode).toEqual(expect.any(Function)));
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro'));
+
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/components/About.astro', path: '0.1', pagePath: '0', occurrence: 0,
+    }));
+
+    await waitFor(() => {
+      expect(harness.previewPaneProps).toMatchObject({
+        activeScope: 'src/components/Card.astro',
+        pageScope: 'src/pages/index.astro',
+        focusPath: '0',
+      });
+    });
+  });
+
+  it('keeps recursive component instances on the edit stack in navigation order', async () => {
+    setupComponentPage();
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onOpenNode).toEqual(expect.any(Function)));
+
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => {
+      expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro');
+      expect(harness.previewPaneProps.overlayInfo('0.1')).not.toBeNull();
+    });
+
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/components/About.astro', path: '0.1', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => {
+      expect(harness.previewPaneProps.activeScope).toBe('src/components/Card.astro');
+      expect(harness.previewPaneProps.overlayInfo('0.0')).not.toBeNull();
+    });
+
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/components/Card.astro', path: '0.0', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => {
+      expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro');
+      expect(harness.previewPaneProps.overlayInfo('0.1')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTitle('Back (Esc)'));
+    await waitFor(() => {
+      expect(harness.previewPaneProps.activeScope).toBe('src/components/Card.astro');
+      expect(harness.previewPaneProps.overlayInfo('0.0')).not.toBeNull();
+    });
+    fireEvent.click(screen.getByTitle('Back (Esc)'));
+    await waitFor(() => {
+      expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro');
+      expect(harness.previewPaneProps.overlayInfo('0.1')).not.toBeNull();
+    });
+    fireEvent.click(screen.getByTitle('Back (Esc)'));
+    await waitFor(() => {
+      expect(harness.previewPaneProps.activeScope).toBe('src/pages/index.astro');
+      expect(harness.previewPaneProps.overlayInfo('0')).not.toBeNull();
+    });
   });
 
   it('routes native copy and paste to a focused terminal and preserves field behavior outside it', async () => {
@@ -247,6 +534,7 @@ describe('App currentFileContext (Current file chip)', () => {
     harness.menu.clear();
     harness.openProject = null;
     harness.terminalPanelProps = null;
+    harness.previewPaneProps = null;
     setupAvb();
   });
 
