@@ -1,5 +1,6 @@
 // @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { MARKER_ATTR, createPreviewMarkerRegistry } = require('./previewMarkerRuntime');
 
 // Preview iframes (nodeIntegrationInSubFrames runs this preload in them too):
 // don't expose the app API to the previewed site — just report the page's
@@ -219,104 +220,42 @@ if (!process.isMainFrame) {
   // selectors (:first-child, :nth-child, …). The app tracks paths; their
   // rects are pushed back on scroll/resize/DOM changes, and hovering the
   // page reports the deepest node under the cursor.
-  const regions = new Map(); // path -> [ [node, ...], ... ]
+  const markerRegistry = createPreviewMarkerRegistry(document);
+  let activeScope = '';
+  let pageScope = '';
   let trackedPaths = [];
+  let focusPath = null;
+  let hiddenPaths = [];
   let lastHoverPath = undefined;
+  let lastHoverPagePath = undefined;
   let lastHoverOcc = 0;
 
-  // Element nodes also carry their path as an attribute, because the node
-  // references above go stale: the page's own scripts are free to rebuild
-  // the DOM, and text-animation libraries do exactly that — GSAP SplitText
-  // rewrites a paragraph as one clone per line, leaving the original element
-  // (the one recorded here) holding just the last line. Attributes ride
-  // along on clones, so the path can be re-resolved live. It has to be an
-  // attribute rather than leaving the <template> markers in the DOM: marker
-  // *nodes* would change what :first-child/:nth-child match.
-  const PATH_ATTR = 'data-avb-p';
-
-  const collectRegions = () => {
-    const starts = document.querySelectorAll('template[data-avb-s]');
-    for (const s of starts) {
-      const p = s.getAttribute('data-avb-s');
-      const run = [];
-      for (let n = s.nextSibling; n; n = n.nextSibling) {
-        if (n.nodeType === 1 && n.tagName === 'TEMPLATE' && n.getAttribute('data-avb-e') === p) break;
-        run.push(n);
-        // A chunk group's run contains its members, which are marked too —
-        // document order puts the deeper path last, so it wins the tag.
-        if (n.nodeType === 1 && n.tagName !== 'TEMPLATE') n.setAttribute(PATH_ATTR, p);
-      }
-      if (!regions.has(p)) regions.set(p, []);
-      regions.get(p).push(run);
-    }
-    document
-      .querySelectorAll('template[data-avb-s], template[data-avb-e]')
-      .forEach((t) => t.remove());
-  };
-
-  // Grows `acc` (a left/top/right/bottom box, or null) by one node's box.
-  const addNode = (acc, n) => {
-    if (!n.isConnected) return acc;
-    let b = null;
-    if (n.nodeType === 1) {
-      if (n.tagName === 'TEMPLATE') return acc;
-      b = n.getBoundingClientRect();
-      // `display: contents` generates no box of its own, so the element
-      // measures zero however big its content is. Astro sets it on
-      // <astro-island>/<astro-slot>, which is every client: component — they
-      // selected fine (hover walks the DOM) but drew no outline. Fall back to
-      // the children, which do generate boxes.
-      if (b.width === 0 && b.height === 0) {
-        for (const c of n.childNodes) acc = addNode(acc, c);
-        return acc;
-      }
-    } else if (n.nodeType === 3 && n.textContent.trim()) {
-      const range = document.createRange();
-      range.selectNode(n);
-      b = range.getBoundingClientRect();
-    }
-    if (!b || (b.width === 0 && b.height === 0)) return acc;
-    if (!acc) return { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
-    return {
-      left: Math.min(acc.left, b.left),
-      top: Math.min(acc.top, b.top),
-      right: Math.max(acc.right, b.right),
-      bottom: Math.max(acc.bottom, b.bottom),
-    };
-  };
-
-  const toRect = (a) => ({ x: a.left, y: a.top, w: a.right - a.left, h: a.bottom - a.top });
-
-  // One rect per marker-pair occurrence (a loop child renders once per
-  // item — each instance gets its own box), unioned across the nodes
-  // inside each occurrence.
-  const rectsForPath = (p) => {
-    const runs = regions.get(p);
-    if (!runs) return null;
-    const out = [];
-    for (const run of runs) {
-      let acc = null;
-      for (const n of run) acc = addNode(acc, n);
-      if (acc) out.push(toRect(acc));
-    }
-    // A single node can still be many elements on the page — see PATH_ATTR:
-    // a split paragraph's original element covers only its last line, and
-    // the rest of it lives in clones. Union every tagged piece back into one
-    // box. Repeated occurrences (a loop child, once per item) are meant to
-    // stay separate boxes, so they keep the per-run rects above.
-    if (runs.length === 1) {
-      let acc = runs[0].reduce(addNode, null);
-      for (const el of document.querySelectorAll(`[${PATH_ATTR}="${p}"]`)) acc = addNode(acc, el);
-      return acc ? [toRect(acc)] : null;
-    }
-    return out.length ? out : null;
-  };
-
   const sendRects = () => {
-    if (!trackedPaths.length) return;
+    if (!trackedPaths.length && !focusPath) return;
     const rects = {};
-    for (const p of trackedPaths) rects[p] = rectsForPath(p);
-    window.parent.postMessage({ type: 'avb:rects', rects }, '*');
+    for (const p of trackedPaths) rects[p] = markerRegistry.rectsFor(activeScope, p);
+    const focusRects = focusPath ? markerRegistry.rectsFor(pageScope, focusPath) : null;
+    window.parent.postMessage({ type: 'avb:rects', rects, focusRects }, '*');
+  };
+
+  let hiddenStyleEl = null;
+  const updateHiddenStyles = () => {
+    const tokens = markerRegistry.markerTokensForSubtrees(activeScope, hiddenPaths);
+    if (tokens.length === 0) {
+      if (hiddenStyleEl) {
+        hiddenStyleEl.remove();
+        hiddenStyleEl = null;
+      }
+      return;
+    }
+    if (!hiddenStyleEl) {
+      hiddenStyleEl = document.createElement('style');
+      hiddenStyleEl.id = 'avb-hidden-nodes';
+      if (document.head) document.head.appendChild(hiddenStyleEl);
+    }
+    hiddenStyleEl.textContent = tokens
+      .map((token) => `[${MARKER_ATTR}~="${token}"]`)
+      .join(',\n') + ' { display: none !important; }';
   };
 
   // Selecting a node in the navigator brings it onto the page. Only scrolls
@@ -324,7 +263,7 @@ if (!process.isMainFrame) {
   // on screen shouldn't move the page under the user.
   const SCROLL_MARGIN = 24;
   const scrollPathIntoView = (p) => {
-    const rects = rectsForPath(p);
+    const rects = markerRegistry.rectsFor(activeScope, p);
     if (!rects || !rects.length) return;
     const r = rects[0]; // viewport-relative
     const vh = window.innerHeight || document.documentElement.clientHeight;
@@ -345,57 +284,8 @@ if (!process.isMainFrame) {
     });
   };
 
-  // Which rendered copy of a node the target sits in. A node inside a loop
-  // is recorded once per item, so the runs are the instances in order.
-  const occurrenceOf = (path, target) => {
-    const runs = regions.get(path);
-    if (!runs || runs.length < 2) return 0;
-    for (let i = 0; i < runs.length; i++) {
-      for (const n of runs[i]) {
-        if (!n.isConnected) continue;
-        if (n === target || (n.nodeType === 1 && n.contains(target))) return i;
-      }
-    }
-    return 0;
-  };
-
-  // Deepest marked node whose rendered DOM contains the target, plus which
-  // instance of it was hit — the app outlines only that one.
-  const nodeAt = (target) => {
-    // Clones the page's own scripts made aren't in any recorded run, so the
-    // tag is the only way to reach them — without this, clicking a split
-    // paragraph would select its parent instead.
-    const tagged = target instanceof Element ? target.closest(`[${PATH_ATTR}]`) : null;
-    let best = tagged ? tagged.getAttribute(PATH_ATTR) : null;
-    let bestDepth = best ? best.split('.').length : -1;
-    for (const [p, runs] of regions) {
-      const depth = p.split('.').length;
-      if (depth <= bestDepth) continue;
-      for (const run of runs) {
-        let hit = false;
-        for (const n of run) {
-          if (n.isConnected && n.nodeType === 1 && (n === target || n.contains(target))) {
-            hit = true;
-            break;
-          }
-        }
-        if (hit) {
-          best = p;
-          bestDepth = depth;
-          break;
-        }
-      }
-    }
-    // Resolved separately from the search above: when the winning path came
-    // from the tag, its own runs were never scanned.
-    return { path: best, occurrence: best ? occurrenceOf(best, target) : 0 };
-  };
-
-  const pathContaining = (target) => nodeAt(target).path;
-
   const startOutlines = () => {
-    collectRegions();
-    if (!regions.size) return;
+    markerRegistry.collect();
     window.addEventListener('scroll', queueRects, true);
     window.addEventListener('resize', queueRects);
     new MutationObserver(queueRects).observe(document.body || document.documentElement, {
@@ -405,17 +295,35 @@ if (!process.isMainFrame) {
       characterData: true,
     });
     document.addEventListener('mousemove', (e) => {
-      const { path: p, occurrence } = nodeAt(e.target);
-      if (p !== lastHoverPath || occurrence !== lastHoverOcc) {
+      const activeHit = markerRegistry.nodeAt(e.target, activeScope);
+      const pageHit = markerRegistry.nodeAt(e.target, pageScope);
+      const p = activeHit?.path ?? null;
+      const pagePath = pageHit?.path ?? null;
+      const occurrence = activeHit?.occurrence ?? 0;
+      if (p !== lastHoverPath || pagePath !== lastHoverPagePath || occurrence !== lastHoverOcc) {
         lastHoverPath = p;
+        lastHoverPagePath = pagePath;
         lastHoverOcc = occurrence;
-        window.parent.postMessage({ type: 'avb:hover-node', path: p, occurrence }, '*');
+        window.parent.postMessage(
+          {
+            type: 'avb:hover-node',
+            scope: activeScope,
+            path: p,
+            pagePath,
+            occurrence,
+          },
+          '*'
+        );
       }
     });
     document.documentElement.addEventListener('mouseleave', () => {
       if (lastHoverPath !== null) {
         lastHoverPath = null;
-        window.parent.postMessage({ type: 'avb:hover-node', path: null }, '*');
+        lastHoverPagePath = null;
+        window.parent.postMessage(
+          { type: 'avb:hover-node', scope: activeScope, path: null, pagePath: null, occurrence: 0 },
+          '*'
+        );
       }
     });
     // Double-clicking a component opens it for editing, the way Webflow
@@ -426,8 +334,20 @@ if (!process.isMainFrame) {
         if (!designMode) return;
         e.preventDefault();
         e.stopPropagation();
-        const p = pathContaining(e.target);
-        if (p) window.parent.postMessage({ type: 'avb:open-node', path: p }, '*');
+        const activeHit = markerRegistry.nodeAt(e.target, activeScope);
+        const pageHit = markerRegistry.nodeAt(e.target, pageScope);
+        if (activeHit?.path) {
+          window.parent.postMessage(
+            {
+              type: 'avb:open-node',
+              scope: activeScope,
+              path: activeHit.path,
+              pagePath: pageHit?.path ?? null,
+              occurrence: activeHit.occurrence,
+            },
+            '*'
+          );
+        }
       },
       true
     );
@@ -444,9 +364,16 @@ if (!process.isMainFrame) {
         e.stopPropagation();
         // A click that hits no marked node still reports (path null) — the
         // app uses empty clicks to back out of component editing.
-        const { path: p, occurrence } = nodeAt(e.target);
+        const activeHit = markerRegistry.nodeAt(e.target, activeScope);
+        const pageHit = markerRegistry.nodeAt(e.target, pageScope);
         window.parent.postMessage(
-          { type: 'avb:click-node', path: p || null, occurrence },
+          {
+            type: 'avb:click-node',
+            scope: activeScope,
+            path: activeHit?.path ?? null,
+            pagePath: pageHit?.path ?? null,
+            occurrence: activeHit?.occurrence ?? 0,
+          },
           '*'
         );
       },
@@ -462,7 +389,12 @@ if (!process.isMainFrame) {
     const d = e.data;
     if (d?.type === 'avb:track' && Array.isArray(d.paths)) {
       designMode = true;
+      activeScope = typeof d.activeScope === 'string' ? d.activeScope : '';
+      pageScope = typeof d.pageScope === 'string' ? d.pageScope : activeScope;
       trackedPaths = d.paths;
+      focusPath = typeof d.focusPath === 'string' ? d.focusPath : null;
+      hiddenPaths = Array.isArray(d.hiddenPaths) ? d.hiddenPaths : [];
+      updateHiddenStyles();
       sendRects();
     }
     if (d?.type === 'avb:scroll-to' && typeof d.path === 'string') {
