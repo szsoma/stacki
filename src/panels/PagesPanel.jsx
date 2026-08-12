@@ -1,5 +1,6 @@
 // @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n/I18nContext.jsx';
 import Dropdown from '../ui/Dropdown.jsx';
 import {
   FileIcon,
@@ -58,6 +59,7 @@ export default function PagesPanel({
   onRenameFolder,
   onDeleteFolder,
 }) {
+  const t = useT();
   const [showNew, setShowNew] = useState(false);
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState(() => new Set());
@@ -144,7 +146,7 @@ export default function PagesPanel({
         )}
         <button
           className="row-action"
-          title="Delete page"
+          title={t('pagesPanel.delete')}
           onClick={(e) => {
             e.stopPropagation();
             onDelete(page);
@@ -193,12 +195,12 @@ export default function PagesPanel({
           )}
           {isCollapsed && count > 0 && (
             <span className="sub folder-count">
-              {count} page{count === 1 ? '' : 's'}
+              {t('pagesPanel.pageCount', { count, plural: count === 1 ? '' : 's' })}
             </span>
           )}
           <button
             className="row-action"
-            title="Delete folder"
+            title={t('pagesPanel.deleteFolder')}
             onClick={(e) => {
               e.stopPropagation();
               onDeleteFolder(rel, count);
@@ -235,14 +237,14 @@ export default function PagesPanel({
   return (
     <div className="panel-section grow">
       <div className="panel-header">
-        <h2>Pages</h2>
+        <h2>{t('pagesPanel.heading')}</h2>
         <div style={{ display: 'flex', gap: 2 }}>
-          <button className="ghost" title="Rescan project files" onClick={onRescan}>
+          <button className="ghost" title={t('pagesPanel.rescan')} onClick={onRescan}>
             <RefreshIcon size={13} />
           </button>
           <button
             className="ghost"
-            title="New folder"
+            title={t('pagesPanel.createFolder')}
             onClick={async () => {
               const name = await onCreateFolder();
               if (name) setEditing({ type: 'folder', key: name });
@@ -250,7 +252,7 @@ export default function PagesPanel({
           >
             <FolderPlusIcon size={13} />
           </button>
-          <button className="ghost" title="New page" onClick={() => setShowNew(true)}>
+          <button className="ghost" title={t('pagesPanel.createPage')} onClick={() => setShowNew(true)}>
             <PlusIcon size={13} />
           </button>
         </div>
@@ -259,7 +261,7 @@ export default function PagesPanel({
       <div style={{ padding: '0 12px 8px' }}>
         <input
           value={query}
-          placeholder="Search pages and folders"
+          placeholder={t('pagesPanel.search')}
           spellCheck={false}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -290,14 +292,14 @@ export default function PagesPanel({
               </div>
             ))}
             {searchResults.length === 0 && (
-              <div className="props-empty">No pages match “{query.trim()}”.</div>
+              <div className="props-empty">{t('pagesPanel.noSearchMatch', { query: query.trim() })}</div>
             )}
           </>
         ) : (
           <>
             {renderChildren(tree, '', 0)}
             {scan.pages.length === 0 && (scan.pageFolders || []).length === 0 && (
-              <div className="props-empty">No pages yet. Create one with +.</div>
+              <div className="props-empty">{t('pagesPanel.noPagesYet')}</div>
             )}
           </>
         )}
@@ -344,6 +346,7 @@ function RenameInput({ initial, onCommit }) {
 }
 
 function NewPageModal({ layouts, onClose, onCreate }) {
+  const t = useT();
   const [name, setName] = useState('');
   const [layout, setLayout] = useState(layouts[0]?.name || '');
 
@@ -355,24 +358,24 @@ function NewPageModal({ layouts, onClose, onCreate }) {
   return (
     <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <div className="modal-header">New Page</div>
+        <div className="modal-header">{t('pagesPanel.newPageModal')}</div>
         <div className="modal-body">
           <div>
-            <label>Page name (e.g. "about" or "blog/post-1")</label>
+            <label>{t('pagesPanel.pageName')}</label>
             <input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && submit()}
-              placeholder="about"
+              placeholder={t('pagesPanel.pageNamePlaceholder')}
             />
           </div>
           <div>
-            <label>Layout</label>
+            <label>{t('pagesPanel.layout')}</label>
             <Dropdown
               value={layout}
               options={[
-                { value: '', label: '(no layout)', dim: true },
+                { value: '', label: t('pagesPanel.noLayout'), dim: true },
                 ...layouts.map((l) => ({ value: l.name, label: l.name })),
               ]}
               onChange={setLayout}
@@ -380,9 +383,9 @@ function NewPageModal({ layouts, onClose, onCreate }) {
           </div>
         </div>
         <div className="modal-footer">
-          <button onClick={onClose}>Cancel</button>
+          <button onClick={onClose}>{t('common.cancel')}</button>
           <button className="primary" disabled={!name.trim()} onClick={submit}>
-            Create Page
+            {t('pagesPanel.createPageButton')}
           </button>
         </div>
       </div>

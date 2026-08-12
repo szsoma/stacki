@@ -1,9 +1,11 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
+import App from './App.jsx';
+import { I18nProvider } from './i18n/I18nContext.jsx';
 import './styles.css';
 
-const root = document.getElementById('root');
-if (!root) throw new Error('index.html is missing its #root element.');
-
-createRoot(root).render(<App />);
+createRoot(document.getElementById('root')).render(
+  <I18nProvider>
+    <App />
+  </I18nProvider>
+);

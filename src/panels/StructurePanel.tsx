@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n/I18nContext.jsx';
 import { canContainTag } from '../elementSchemas.js';
 import { isDataBound } from '../bindings.js';
 import { setDrag, clearDrag, getDrag } from '../dragState.js';
@@ -98,7 +99,7 @@ export default function StructurePanel({
   const selectedId = useAppStore((s) => s.selectedId);
   const revealTick = useAppStore((s) => s.revealTick);
   const currentLayoutName = useAppStore(selectCurrentLayoutName);
-
+  const t = useT();
   // dropTarget: {parentId, index} for gaps, {intoId} for node rows
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   // Manual expand/collapse overrides by node id; nodes not in the map use
@@ -211,9 +212,9 @@ export default function StructurePanel({
     return (
       <div className="panel-section grow">
         <div className="panel-header">
-          <h2>Navigator</h2>
+          <h2>{t('structurePanel.heading')}</h2>
         </div>
-        <div className="props-empty">Select a page to edit.</div>
+        <div className="props-empty">{t('structurePanel.empty')}</div>
       </div>
     );
   }
@@ -222,12 +223,12 @@ export default function StructurePanel({
     return (
       <div className="panel-section grow">
         <div className="panel-header">
-          <h2>Code</h2>
+          <h2>{t('structurePanel.code')}</h2>
         </div>
         <div className="code-editor">
           <div className="code-note">
-            {pageState.reason || 'This page cannot be edited visually.'} You can still edit
-            the source here — the preview updates live.
+            {pageState.reason || t('structurePanel.notEditableReason')}{' '}
+            {t('structurePanel.editSourceHint')}
           </div>
           <textarea
             spellCheck={false}
@@ -280,7 +281,7 @@ export default function StructurePanel({
   return (
     <div className="panel-section grow">
       <div className="panel-header">
-        <h2>Navigator</h2>
+        <h2>{t('structurePanel.heading')}</h2>
         <button
           className="ghost"
           onMouseEnter={showTipSoon}
@@ -295,7 +296,7 @@ export default function StructurePanel({
       </div>
       {headerTip && (
         <div className="rail-tooltip below" style={{ left: headerTip.left, top: headerTip.top }}>
-          {allExpanded ? 'Collapse all' : 'Expand all'}
+          {allExpanded ? t('structurePanel.collapseAll') : t('structurePanel.expandAll')}
         </div>
       )}
 
@@ -311,9 +312,12 @@ export default function StructurePanel({
           <span className="icon">
             <CodeIcon size={12} />
           </span>
-          <span className="label">Frontmatter</span>
+          <span className="label">{t('structurePanel.frontmatter')}</span>
           <span className="prop-preview">
-            {(model.imports || []).length} import{(model.imports || []).length === 1 ? '' : 's'}
+            {t('structurePanel.imports', {
+              count: (model.imports || []).length,
+              plural: (model.imports || []).length === 1 ? '' : 's',
+            })}
           </span>
         </div>
 
@@ -352,7 +356,7 @@ export default function StructurePanel({
             }}
             onDrop={(e) => performDrop(e, { parentId: null, index: 0 })}
           >
-            Drag components here
+            {t('structurePanel.dragHere')}
           </div>
         )}
       </div>
@@ -375,6 +379,7 @@ export default function StructurePanel({
   );
 }
 
+// Right-click menu for navigator nodes.
 function ContextMenu({
   pos,
   canPaste,
@@ -386,6 +391,7 @@ function ContextMenu({
   onClose: () => void;
   onAction: (action: string) => void;
 }) {
+  const t = useT();
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -439,11 +445,11 @@ function ContextMenu({
 
   return (
     <div ref={ref} className="ctx-menu" style={{ left, top, width }}>
-      <Item action="copy" label="Copy" shortcut="⌘C" />
-      <Item action="paste" label="Paste" shortcut="⌘V" disabled={!canPaste} />
-      <Item action="duplicate" label="Duplicate" shortcut="⌘D" />
+      <Item action="copy" label={t('common.copy')} shortcut="⌘C" />
+      <Item action="paste" label={t('common.paste')} shortcut="⌘V" disabled={!canPaste} />
+      <Item action="duplicate" label={t('common.duplicate')} shortcut="⌘D" />
       <div className="ctx-divider" />
-      <Item action="delete" label="Delete" shortcut="⌫" />
+      <Item action="delete" label={t('common.delete')} shortcut="⌫" />
     </div>
   );
 }

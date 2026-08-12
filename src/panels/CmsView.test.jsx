@@ -3,6 +3,9 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CmsView from './CmsView.jsx';
+import { I18nProvider } from '../i18n/I18nContext.jsx';
+
+const wrapper = ({ children }) => <I18nProvider>{children}</I18nProvider>;
 
 const project = { path: '/projects/site' };
 
@@ -46,8 +49,7 @@ describe('creating a reference field', () => {
     mockAvb({
       files: { 'data/posts.json': [{ title: 'Hello' }], 'data/authors.json': [{ name: 'Ada' }] },
     });
-    render(<CmsView project={project} rel="data/posts.json" settings showToast={vi.fn()} />);
-
+    render(<CmsView project={project} rel="data/posts.json" settings showToast={vi.fn()} />, { wrapper });
     fireEvent.click(await screen.findByText('Add field'));
     fireEvent.click(await screen.findByText('Reference'));
     fireEvent.click(await screen.findByText('Authors'));
@@ -70,7 +72,7 @@ describe('creating a reference field', () => {
     mockAvb({
       files: { 'data/posts.json': [{ title: 'Hello' }], 'data/tags.json': [{ name: 'News' }] },
     });
-    render(<CmsView project={project} rel="data/posts.json" settings showToast={vi.fn()} />);
+    render(<CmsView project={project} rel="data/posts.json" settings showToast={vi.fn()} />, { wrapper });
 
     fireEvent.click(await screen.findByText('Add field'));
     fireEvent.click(await screen.findByText('Multi-reference'));
@@ -100,7 +102,7 @@ describe('editing a reference value', () => {
       },
       meta: { 'data/posts.json': { author: { type: 'reference', collection: 'data/authors.json' } } },
     });
-    render(<CmsView project={project} rel="data/posts.json" showToast={vi.fn()} />);
+    render(<CmsView project={project} rel="data/posts.json" showToast={vi.fn()} />, { wrapper });
 
     fireEvent.click(await screen.findByText('Choose item'));
     fireEvent.click(await screen.findByText('Ada'));
@@ -118,7 +120,7 @@ describe('editing a reference value', () => {
       },
       meta: { 'data/posts.json': { author: { type: 'reference', collection: 'data/authors.json' } } },
     });
-    render(<CmsView project={project} rel="data/posts.json" showToast={vi.fn()} />);
+    render(<CmsView project={project} rel="data/posts.json" showToast={vi.fn()} />, { wrapper });
     expect(await screen.findByText('Missing item')).toBeInTheDocument();
   });
 
@@ -130,7 +132,7 @@ describe('editing a reference value', () => {
       },
       meta: { 'data/posts.json': { 'seo.reviewer': { type: 'reference', collection: 'data/authors.json' } } },
     });
-    render(<CmsView project={project} rel="data/posts.json" showToast={vi.fn()} />);
+    render(<CmsView project={project} rel="data/posts.json" showToast={vi.fn()} />, { wrapper });
     fireEvent.click(await screen.findByText('Choose item'));
     fireEvent.click(await screen.findByText('Ada'));
     expect(await screen.findByText('Ada')).toBeInTheDocument();
@@ -146,7 +148,7 @@ describe('editing a multi-reference value', () => {
       },
       meta: { 'data/posts.json': { tags: { type: 'multiReference', collection: 'data/tags.json' } } },
     });
-    render(<CmsView project={project} rel="data/posts.json" showToast={vi.fn()} />);
+    render(<CmsView project={project} rel="data/posts.json" showToast={vi.fn()} />, { wrapper });
 
     expect(await screen.findByText('News')).toBeInTheDocument();
 
@@ -173,7 +175,7 @@ describe('deleting an item that is referenced elsewhere', () => {
       },
       meta: { 'data/posts.json': { author: { type: 'reference', collection: 'data/authors.json' } } },
     });
-    render(<CmsView project={project} rel="data/authors.json" showToast={vi.fn()} />);
+    render(<CmsView project={project} rel="data/authors.json" showToast={vi.fn()} />, { wrapper });
 
     fireEvent.click(await screen.findByTitle('Delete item'));
     expect(await screen.findByText('This item is referenced elsewhere')).toBeInTheDocument();
@@ -187,7 +189,7 @@ describe('deleting an item that is referenced elsewhere', () => {
   it('deletes immediately when nothing references the item', async () => {
     mockAvb({ files: { 'data/authors.json': [{ name: 'Ada' }] } });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render(<CmsView project={project} rel="data/authors.json" showToast={vi.fn()} />);
+    render(<CmsView project={project} rel="data/authors.json" showToast={vi.fn()} />, { wrapper });
     fireEvent.click(await screen.findByTitle('Delete item'));
     await waitFor(() => expect(window.avb.writeCms).toHaveBeenCalled(), { timeout: 2000 });
   });
@@ -206,7 +208,8 @@ describe('jumping to a referencing item', () => {
         showToast={vi.fn()}
         jumpItemId="a2"
         onJumpHandled={onJumpHandled}
-      />
+      />,
+      { wrapper }
     );
     // The title shows in the item list and again in the detail header once
     // selected, so pick the list row specifically.
@@ -230,7 +233,8 @@ describe('jumping to a referencing item', () => {
     });
     const onJumpToItem = vi.fn();
     render(
-      <CmsView project={project} rel="data/authors.json" showToast={vi.fn()} onJumpToItem={onJumpToItem} />
+      <CmsView project={project} rel="data/authors.json" showToast={vi.fn()} onJumpToItem={onJumpToItem} />,
+      { wrapper }
     );
     fireEvent.click(await screen.findByTitle('Delete item'));
     fireEvent.click(await screen.findByText('Show instance'));
@@ -247,7 +251,7 @@ describe('deleting a collection whose items are referenced elsewhere', () => {
       },
       meta: { 'data/posts.json': { author: { type: 'reference', collection: 'data/authors.json' } } },
     });
-    render(<CmsView project={project} rel="data/authors.json" settings showToast={vi.fn()} />);
+    render(<CmsView project={project} rel="data/authors.json" settings showToast={vi.fn()} />, { wrapper });
 
     fireEvent.click(await screen.findByText('Delete Authors'));
     expect(await screen.findByText('Items in this collection are referenced elsewhere')).toBeInTheDocument();
@@ -258,7 +262,8 @@ describe('deleting a collection whose items are referenced elsewhere', () => {
     mockAvb({ files: { 'data/authors.json': [{ name: 'Ada' }] } });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(
-      <CmsView project={project} rel="data/authors.json" settings showToast={vi.fn()} onDeleted={vi.fn()} />
+      <CmsView project={project} rel="data/authors.json" settings showToast={vi.fn()} onDeleted={vi.fn()} />,
+      { wrapper }
     );
     fireEvent.click(await screen.findByText('Delete Authors'));
     await waitFor(() => expect(window.avb.deleteCms).toHaveBeenCalled());

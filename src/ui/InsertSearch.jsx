@@ -1,5 +1,6 @@
 // @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useT } from '../i18n/I18nContext.jsx';
 import { HTML_TAGS } from '../elementSchemas.js';
 import {
   elementIcon,
@@ -12,30 +13,28 @@ import {
   SearchIcon,
 } from './Icons.jsx';
 
-const TABS = [
-  { key: 'all', label: 'All results' },
-  { key: 'components', label: 'Components' },
-  { key: 'elements', label: 'Elements' },
-  { key: 'other', label: 'Other' },
-];
-
 // Quick-insert palette (⌘F / ⌘E): fuzzy-searches components, HTML tags, and
 // special node types; Enter or click inserts at the current selection.
 export default function InsertSearch({ components, onInsert, onClose }) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState('all');
   const [highlight, setHighlight] = useState(0);
   const listRef = useRef(null);
 
+  const TABS = useMemo(() => [
+    { key: 'all', label: t('insertSearch.tabAll') },
+    { key: 'components', label: t('insertSearch.tabComponents') },
+    { key: 'elements', label: t('insertSearch.tabElements') },
+    { key: 'other', label: t('insertSearch.tabOther') },
+  ], [t]);
+
   const allItems = useMemo(() => {
-    // Layouts sit in the same list as components — they insert identically,
-    // and their folder in `sub` both says where they came from and makes
-    // them findable by typing "layouts".
     const comps = (components || []).map((c) => ({
       type: 'component',
       name: c.name,
       label: c.name,
-      sub: c.folder || 'component',
+      sub: c.folder || t('insertSearch.itemComponentSub'),
       cat: 'components',
       icon: c.isLayout ? (
         <LayoutIcon size={15} style={{ color: '#79e09c' }} />
@@ -52,15 +51,15 @@ export default function InsertSearch({ components, onInsert, onClose }) {
       icon: elementIcon(tag, 14),
     }));
     const other = [
-      { type: 'map', label: 'Loop', sub: 'items.map', cat: 'other', icon: <RepeatIcon size={14} style={{ color: '#c4afff' }} /> },
-      { type: 'text', label: 'Text', cat: 'other', icon: <TextIcon size={14} /> },
-      { type: 'comment', label: 'Comment', cat: 'other', icon: <CommentIcon size={14} /> },
-      { type: 'expr', label: 'Code Expression', sub: '{ }', cat: 'other', icon: <CodeIcon size={14} /> },
-      { type: 'style', label: 'Style Block', sub: '<style>', cat: 'other', icon: <CodeIcon size={14} /> },
-      { type: 'script', label: 'Script Block', sub: '<script>', cat: 'other', icon: <CodeIcon size={14} /> },
+      { type: 'map', label: t('insertSearch.itemLoop'), sub: t('insertSearch.itemLoopSub'), cat: 'other', icon: <RepeatIcon size={14} style={{ color: '#c4afff' }} /> },
+      { type: 'text', label: t('insertSearch.itemText'), cat: 'other', icon: <TextIcon size={14} /> },
+      { type: 'comment', label: t('insertSearch.itemComment'), cat: 'other', icon: <CommentIcon size={14} /> },
+      { type: 'expr', label: t('insertSearch.itemCodeExpr'), sub: t('insertSearch.itemCodeExprSub'), cat: 'other', icon: <CodeIcon size={14} /> },
+      { type: 'style', label: t('insertSearch.itemStyleBlock'), sub: t('insertSearch.itemStyleBlockSub'), cat: 'other', icon: <CodeIcon size={14} /> },
+      { type: 'script', label: t('insertSearch.itemScriptBlock'), sub: t('insertSearch.itemScriptBlockSub'), cat: 'other', icon: <CodeIcon size={14} /> },
     ];
     return [...comps, ...tags, ...other];
-  }, [components]);
+  }, [components, t]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -84,7 +83,6 @@ export default function InsertSearch({ components, onInsert, onClose }) {
 
   useEffect(() => setHighlight(0), [query, tab]);
 
-  // Keep the highlighted row scrolled into view.
   useEffect(() => {
     const el = listRef.current?.children[highlight];
     if (el) el.scrollIntoView({ block: 'nearest' });
@@ -105,7 +103,7 @@ export default function InsertSearch({ components, onInsert, onClose }) {
       if (results[highlight]) onInsert(results[highlight]);
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      const idx = TABS.findIndex((t) => t.key === tab);
+      const idx = TABS.findIndex((tb) => tb.key === tab);
       setTab(TABS[(idx + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length].key);
     }
   };
@@ -118,19 +116,19 @@ export default function InsertSearch({ components, onInsert, onClose }) {
           <input
             autoFocus
             value={query}
-            placeholder="Search components, elements…"
+            placeholder={t('insertSearch.placeholder')}
             spellCheck={false}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
         <div className="insert-tabs">
-          {TABS.map((t) => (
+          {TABS.map((tb) => (
             <button
-              key={t.key}
-              className={`insert-tab ${tab === t.key ? 'on' : ''}`}
-              onClick={() => setTab(t.key)}
+              key={tb.key}
+              className={`insert-tab ${tab === tb.key ? 'on' : ''}`}
+              onClick={() => setTab(tb.key)}
             >
-              {t.label}
+              {tb.label}
             </button>
           ))}
         </div>
@@ -147,7 +145,7 @@ export default function InsertSearch({ components, onInsert, onClose }) {
               {item.sub && <span className="insert-item-sub">{item.sub}</span>}
             </div>
           ))}
-          {results.length === 0 && <div className="props-empty">No matches.</div>}
+          {results.length === 0 && <div className="props-empty">{t('insertSearch.noMatches')}</div>}
         </div>
       </div>
     </div>

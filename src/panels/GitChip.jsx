@@ -1,6 +1,7 @@
 // @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef, useState } from 'react';
-import { cleanError } from '../App';
+import { cleanError } from '../App.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 import { BranchIcon, CheckIcon, ExternalIcon, CloseIcon } from '../ui/Icons.jsx';
 
 // owner/repo out of any GitHub remote form (https or ssh), for display.
@@ -16,6 +17,7 @@ const webUrl = (url) => {
 // Branch/status chip in the title bar. Opens a dropdown with branch
 // switching, branch creation, commit + push, and GitHub publishing.
 export default function GitChip({ project, showToast, flushSave, onWorktreeChanged }) {
+  const t = useT();
   const [info, setInfo] = useState(null);
   const [open, setOpen] = useState(false);
   const [commitMsg, setCommitMsg] = useState('');
@@ -49,7 +51,7 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
     return () => document.removeEventListener('mousedown', onDown);
   }, []);
 
-  const act = async (fn, successMsg, label = 'Working…') => {
+  const act = async (fn, successMsg, label = t('gitChip.working')) => {
     setBusy(label);
     setError(null);
     try {
@@ -92,8 +94,8 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
   const switchNow = (branch) =>
     act(
       () => window.avb.gitCheckout({ projectPath: project.path, branch }),
-      `Switched to ${branch}`,
-      'Switching…'
+      t('gitChip.switchedTo', { branch }),
+      t('gitChip.switching')
     );
 
   const commitThenSwitch = (branch, message) => {
@@ -103,26 +105,26 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
         await window.avb.gitCommit({ projectPath: project.path, message });
         await window.avb.gitCheckout({ projectPath: project.path, branch });
       },
-      `Committed to ${from}, now on ${branch}`,
-      'Committing…'
+      t('gitChip.committedToSwitched', { from, to: branch }),
+      t('gitChip.committing')
     );
   };
 
   // Publishing is driven from the modal so it can show each step and keep the
   // form (and any error) in place instead of closing on a fire-and-forget.
   const publish = async ({ repoName, isPrivate, onStep }) => {
-    setBusy('Publishing…');
+    setBusy(t('gitChip.publishing'));
     try {
       await flushSave();
       const state = await refresh();
       if (state.dirty || state.branch === '(no commits yet)') {
-        onStep('Committing changes…');
+        onStep(t('gitChip.committingChanges'));
         await window.avb.gitCommit({
           projectPath: project.path,
-          message: 'Initial commit from Stacki',
+          message: t('gitChip.initialCommitMsg'),
         });
       }
-      onStep('Creating repository and pushing…');
+      onStep(t('gitChip.creatingRepoAndPushing'));
       const res = await window.avb.gitPublish({
         projectPath: project.path,
         repoName,
@@ -145,34 +147,34 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
         onClick={() =>
           act(
             () => window.avb.gitInit(project.path),
-            'Initialized git repository',
-            'Initializing…'
+            t('gitChip.initialized'),
+            t('gitChip.initializing')
           )
         }
       >
         {working ? <span className="mini-spinner" /> : <BranchIcon size={12} />}
-        {working ? busy : 'Initialize Git'}
+        {working ? busy : t('gitChip.initializeGit')}
       </button>
     );
   }
 
   const commit = () => {
-    const message = commitMsg.trim() || 'Update from Stacki';
+    const message = commitMsg.trim() || t('gitChip.defaultCommitMsg');
     setCommitMsg('');
     act(
       () => window.avb.gitCommit({ projectPath: project.path, message }),
-      'Changes committed',
-      'Committing…'
+      t('gitChip.changesCommitted'),
+      t('gitChip.committing')
     );
   };
 
   // Three distinct states, because "0 commits ahead" and "never pushed" mean
   // very different things — see hasUpstream in git:info.
   const pushLabel = !info.hasUpstream
-    ? `Push ${info.branch} to origin`
+    ? t('gitChip.pushBranchToOrigin', { branch: info.branch })
     : info.ahead > 0
-      ? `Push ${info.ahead} commit${info.ahead === 1 ? '' : 's'}`
-      : 'Everything pushed';
+      ? t('gitChip.pushCount', { count: info.ahead, plural: info.ahead === 1 ? '' : 's' })
+      : t('gitChip.everythingPushed');
   const canPush = info.hasUpstream ? info.ahead > 0 : true;
 
   return (
@@ -204,12 +206,12 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
           {error && (
             <div className="git-error">
               {error}
-              <button className="ghost" title="Dismiss" onClick={() => setError(null)}>
+              <button className="ghost" title={t('gitChip.dismiss')} onClick={() => setError(null)}>
                 <CloseIcon size={11} />
               </button>
             </div>
           )}
-          <h3>Branches</h3>
+          <h3>{t('gitChip.branches')}</h3>
           {info.branches.map((b) => (
             <div
               key={b}
@@ -224,7 +226,7 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
           ))}
           <div className="dropdown-row">
             <input
-              placeholder="new-branch-name"
+              placeholder={t('gitChip.newBranchPlaceholder')}
               value={newBranch}
               onChange={(e) => setNewBranch(e.target.value)}
               onKeyDown={(e) => {
@@ -238,8 +240,8 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
                         branch: name,
                         create: true,
                       }),
-                    `Created branch ${name}`,
-                    'Creating branch…'
+                    t('gitChip.createdBranch', { name }),
+                    t('gitChip.creatingBranch')
                   );
                 }
               }}
@@ -247,10 +249,10 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
           </div>
 
           <div className="divider" />
-          <h3>Commit</h3>
+          <h3>{t('gitChip.commit')}</h3>
           <div className="dropdown-row" style={{ flexDirection: 'column', gap: 6 }}>
             <input
-              placeholder="Commit message"
+              placeholder={t('gitChip.commitMessage')}
               value={commitMsg}
               onChange={(e) => setCommitMsg(e.target.value)}
               onKeyDown={(e) => {
@@ -258,18 +260,18 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
               }}
             />
             <button disabled={working || !info.dirty} onClick={commit}>
-              {info.dirty ? 'Commit all changes' : 'Nothing to commit'}
+              {info.dirty ? t('gitChip.commitAllChanges') : t('gitChip.nothingToCommit')}
             </button>
           </div>
 
           <div className="divider" />
-          <h3>GitHub</h3>
+          <h3>{t('gitChip.githubHeader')}</h3>
           <div className="dropdown-row" style={{ flexDirection: 'column', gap: 6 }}>
             {info.remote ? (
               <>
                 <button
                   className="repo-link"
-                  title={`Open ${repoSlug(info.remote)} on GitHub`}
+                  title={t('gitChip.openOnGithub', { repo: repoSlug(info.remote) })}
                   onClick={() => window.avb.openExternal(webUrl(info.remote))}
                 >
                   <span className="repo-slug">{repoSlug(info.remote)}</span>
@@ -282,8 +284,8 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
                     act(
                       () =>
                         window.avb.gitPush({ projectPath: project.path, branch: info.branch }),
-                      `Pushed ${info.branch} to origin`,
-                      'Pushing…'
+                      t('gitChip.pushedBranch', { branch: info.branch }),
+                      t('gitChip.pushing')
                     )
                   }
                 >
@@ -291,14 +293,14 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
                 </button>
                 {info.dirty && (
                   <div className="hint-text">
-                    You have uncommitted changes — commit them first to include them.
+                    {t('gitChip.uncommittedHint')}
                   </div>
                 )}
               </>
             ) : (
               <>
                 <div className="hint-text">
-                  This project isn’t on GitHub yet.
+                  {t('gitChip.notOnGitHub')}
                 </div>
                 <button
                   className="primary"
@@ -308,7 +310,7 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
                     setShowPublish(true);
                   }}
                 >
-                  Publish to GitHub…
+                  {t('gitChip.publishToGithubButton')}
                 </button>
               </>
             )}
@@ -350,6 +352,7 @@ export default function GitChip({ project, showToast, flushSave, onWorktreeChang
 // both reasonable, and picking one silently is how the edits ended up on the
 // wrong branch in the first place.
 function SwitchBranchModal({ from, to, files, busy, onCancel, onTakeAlong, onCommitFirst }) {
+  const t = useT();
   const [message, setMessage] = useState('');
   const working = !!busy;
   const shown = files.slice(0, 5);
@@ -361,11 +364,10 @@ function SwitchBranchModal({ from, to, files, busy, onCancel, onTakeAlong, onCom
       onMouseDown={(e) => e.target === e.currentTarget && !working && onCancel()}
     >
       <div className="modal">
-        <div className="modal-header">Uncommitted changes</div>
+        <div className="modal-header">{t('gitChip.switchModal.header')}</div>
         <div className="modal-body">
           <div className="hint-text">
-            You have unsaved-to-git changes on <strong>{from}</strong>. Git carries them
-            across a switch, so they’d end up part of <strong>{to}</strong>.
+            {t('gitChip.switchModal.description', { from, to })}
           </div>
 
           {shown.length > 0 && (
@@ -373,20 +375,20 @@ function SwitchBranchModal({ from, to, files, busy, onCancel, onTakeAlong, onCom
               {shown.map((f) => (
                 <li key={f}>{f}</li>
               ))}
-              {rest > 0 && <li className="more">+{rest} more</li>}
+              {rest > 0 && <li className="more">{t('gitChip.switchModal.moreFiles', { count: rest })}</li>}
             </ul>
           )}
 
           <div>
-            <label>Commit message</label>
+            <label>{t('gitChip.commitMessage')}</label>
             <input
               autoFocus
-              placeholder={`Update ${from}`}
+              placeholder={t('gitChip.switchModal.updatePlaceholder', { branch: from })}
               value={message}
               disabled={working}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !working) onCommitFirst(message.trim() || `Update ${from}`);
+                if (e.key === 'Enter' && !working) onCommitFirst(message.trim() || t('gitChip.switchModal.updatePlaceholder', { branch: from }));
               }}
             />
           </div>
@@ -400,17 +402,17 @@ function SwitchBranchModal({ from, to, files, busy, onCancel, onTakeAlong, onCom
         </div>
         <div className="modal-footer">
           <button onClick={onCancel} disabled={working}>
-            Cancel
+            {t('common.cancel')}
           </button>
-          <button onClick={onTakeAlong} disabled={working} title={`Leave them uncommitted and switch to ${to}`}>
-            Take changes to {to}
+          <button onClick={onTakeAlong} disabled={working} title={t('gitChip.switchModal.leaveUncommitted', { branch: to })}>
+            {t('gitChip.switchModal.takeChanges', { branch: to })}
           </button>
           <button
             className="primary"
             disabled={working}
-            onClick={() => onCommitFirst(message.trim() || `Update ${from}`)}
+            onClick={() => onCommitFirst(message.trim() || t('gitChip.switchModal.updatePlaceholder', { branch: from }))}
           >
-            Commit to {from}, then switch
+            {t('gitChip.switchModal.commitThenSwitch', { from })}
           </button>
         </div>
       </div>
@@ -419,6 +421,7 @@ function SwitchBranchModal({ from, to, files, busy, onCancel, onTakeAlong, onCom
 }
 
 function PublishModal({ defaultName, branch, onClose, onPublish, openExternal }) {
+  const t = useT();
   const [name, setName] = useState(
     defaultName.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
   );
@@ -448,7 +451,7 @@ function PublishModal({ defaultName, branch, onClose, onPublish, openExternal })
   const go = async () => {
     setError(null);
     setPhase('publishing');
-    setStep('Preparing…');
+    setStep(t('gitChip.publishModal.preparing'));
     try {
       const result = await onPublish({
         repoName: name.trim(),
@@ -470,7 +473,7 @@ function PublishModal({ defaultName, branch, onClose, onPublish, openExternal })
     >
       <div className="modal">
         <div className="modal-header">
-          {phase === 'done' ? 'Published to GitHub' : 'Publish to GitHub'}
+          {phase === 'done' ? t('gitChip.publishModal.published') : t('gitChip.publish')}
         </div>
 
         {phase === 'done' ? (
@@ -479,7 +482,7 @@ function PublishModal({ defaultName, branch, onClose, onPublish, openExternal })
               <div className="publish-done">
                 <CheckIcon size={14} />
                 <span>
-                  {name} is on GitHub and <strong>{branch}</strong> has been pushed.
+                  {t('gitChip.publishModal.publishedDesc', { name, branch })}
                 </span>
               </div>
               {url && (
@@ -491,7 +494,7 @@ function PublishModal({ defaultName, branch, onClose, onPublish, openExternal })
             </div>
             <div className="modal-footer">
               <button className="primary" onClick={onClose}>
-                Done
+                {t('common.done')}
               </button>
             </div>
           </>
@@ -499,7 +502,7 @@ function PublishModal({ defaultName, branch, onClose, onPublish, openExternal })
           <>
             <div className="modal-body">
               <div>
-                <label>Repository name</label>
+                <label>{t('gitChip.publishModal.repoName')}</label>
                 <input
                   autoFocus
                   value={name}
@@ -518,28 +521,24 @@ function PublishModal({ defaultName, branch, onClose, onPublish, openExternal })
                   disabled={publishing}
                   onChange={(e) => setIsPrivate(e.target.checked)}
                 />
-                Private repository
+                {t('gitChip.publishModal.privateRepo')}
               </label>
 
-              {gh === null && <div className="hint-text">Checking GitHub CLI…</div>}
+              {gh === null && <div className="hint-text">{t('gitChip.publishModal.checkingGh')}</div>}
 
               {gh && !gh.installed && (
-                <div className="error-text">
-                  GitHub CLI (gh) isn’t installed. Install it from cli.github.com, then run
-                  {' '}<code>gh auth login</code>.
-                </div>
+                <div className="error-text">{t('gitChip.publishModal.ghNotInstalled')}</div>
               )}
               {gh?.installed && !gh.authed && (
-                <div className="error-text">
-                  GitHub CLI isn’t signed in. Run <code>gh auth login</code> in a terminal,
-                  then reopen this dialog.
-                </div>
+                <div className="error-text">{t('gitChip.publishModal.ghNotAuthed')}</div>
               )}
               {ready && !publishing && !error && (
                 <div className="hint-text">
-                  Commits any pending changes, creates the repo as{' '}
-                  {isPrivate ? 'private' : 'public'}, and pushes <strong>{branch}</strong>
-                  {gh.user ? ` to ${gh.user}` : ''}.
+                  {t('gitChip.publishModal.publishHint', {
+                    visibility: isPrivate ? 'private' : 'public',
+                    branch,
+                    user: gh.user ? ` to ${gh.user}` : '',
+                  })}
                 </div>
               )}
 
@@ -555,14 +554,14 @@ function PublishModal({ defaultName, branch, onClose, onPublish, openExternal })
 
             <div className="modal-footer">
               <button onClick={onClose} disabled={publishing}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 className="primary"
                 disabled={!name.trim() || !ready || publishing}
                 onClick={go}
               >
-                {publishing ? 'Publishing…' : error ? 'Try again' : 'Publish'}
+                {publishing ? t('gitChip.publishModal.publishing') : error ? t('gitChip.publishModal.tryAgain') : t('gitChip.publishModal.publish')}
               </button>
             </div>
           </>

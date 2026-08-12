@@ -1,5 +1,6 @@
 // @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   PagePanelIcon,
   NavigatorIcon,
@@ -11,12 +12,12 @@ import {
 import { isTerminalShortcut } from '../terminal/terminalLogic.js';
 
 const TABS = [
-  { id: 'pages', title: 'Pages', shortcut: 'P', Icon: PagePanelIcon },
-  { id: 'navigator', title: 'Navigator', shortcut: 'Z', Icon: NavigatorIcon },
-  { id: 'components', title: 'Components', shortcut: '⇧A', Icon: ComponentFillIcon },
-  { id: 'assets', title: 'Assets', shortcut: 'J', Icon: AssetManagerIcon },
-  { id: 'cms', title: 'CMS', shortcut: '⌥C', Icon: CmsIcon },
-  { id: 'terminal', title: 'Terminal', shortcut: '⌥T', Icon: TerminalIcon },
+  { id: 'pages', titleKey: 'nav.pages', shortcut: 'P', Icon: PagePanelIcon },
+  { id: 'navigator', titleKey: 'nav.navigator', shortcut: 'Z', Icon: NavigatorIcon },
+  { id: 'components', titleKey: 'nav.components', shortcut: '⇧A', Icon: ComponentFillIcon },
+  { id: 'assets', titleKey: 'nav.assets', shortcut: 'J', Icon: AssetManagerIcon },
+  { id: 'cms', titleKey: 'nav.cms', shortcut: '⌥C', Icon: CmsIcon },
+  { id: 'terminal', titleKey: 'nav.terminal', shortcut: '⌥T', Icon: TerminalIcon },
 ];
 
 const TOOLTIP_DELAY = 500;
@@ -24,6 +25,7 @@ const TOOLTIP_DELAY = 500;
 // Webflow-style icon rail. Clicking the active tab collapses the panel.
 // Hovering a button for a moment shows a tooltip with its keyboard shortcut.
 export default function LeftRail({ active, onSelect }) {
+  const t = useT();
   const [tip, setTip] = useState(null); // {id, left, top}
   const timerRef = useRef(null);
 
@@ -88,11 +90,11 @@ export default function LeftRail({ active, onSelect }) {
 
   return (
     <div className="rail">
-      {TABS.map(({ id, title, Icon }) => (
+      {TABS.map(({ id, titleKey, Icon }) => (
         <button
           key={id}
           type="button"
-          aria-label={title}
+          aria-label={t(titleKey)}
           aria-pressed={active === id}
           className={`rail-btn ${active === id ? 'on' : ''}`}
           onMouseEnter={showSoon(id)}
@@ -107,7 +109,7 @@ export default function LeftRail({ active, onSelect }) {
       ))}
       {tipTab && (
         <div className="rail-tooltip" style={{ left: tip.left, top: tip.top }}>
-          {tipTab.title} ({tipTab.shortcut})
+          {t(tipTab.titleKey)} ({tipTab.shortcut})
         </div>
       )}
     </div>

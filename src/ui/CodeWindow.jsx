@@ -1,5 +1,6 @@
 // @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useState } from 'react';
+import { useT } from '../i18n/I18nContext.jsx';
 import CodeEditor from './CodeEditor.jsx';
 import { CloseIcon, CodeIcon } from './Icons.jsx';
 
@@ -10,6 +11,7 @@ const MIN_H = 220;
 // Floating, draggable, resizable code editor window. Non-modal: the rest of
 // the app stays interactive while it's open.
 export default function CodeWindow({ title, language, value, onChange, onClose, editorKey }) {
+  const t = useT();
   const [rect, setRect] = useState(() => ({
     x: Math.max(60, window.innerWidth - 660),
     y: 96,
@@ -80,7 +82,7 @@ export default function CodeWindow({ title, language, value, onChange, onClose, 
         <span className="code-window-title">{title}</span>
         <span className="type-tag">{language}</span>
         <span style={{ flex: 1 }} />
-        <button className="ghost" title="Close (edits are saved live)" onClick={onClose}>
+        <button className="ghost" title={t('codeWindow.close')} onClick={onClose}>
           <CloseIcon size={12} />
         </button>
       </div>

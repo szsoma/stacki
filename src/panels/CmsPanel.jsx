@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CmsIcon, PlusIcon, ChevronRightIcon, GearIcon } from '../ui/Icons.jsx';
 import { collectionOf } from '../cmsSchema.js';
+import { useT } from '../i18n/I18nContext.jsx';
 
 // Left-rail panel: every .json file under src/ listed as a collection.
 // Picking one opens the editor over the canvas (see CmsView).
@@ -13,6 +14,7 @@ export default function CmsPanel({
   onOpenSettings,
   showToast,
 }) {
+  const t = useT();
   const [files, setFiles] = useState([]);
   const [creating, setCreating] = useState(false);
 
@@ -61,8 +63,8 @@ export default function CmsPanel({
   return (
     <div className="panel-section grow">
       <div className="panel-header">
-        <h2>CMS Collections</h2>
-        <button className="ghost" title="New collection" onClick={() => setCreating(true)}>
+        <h2>{t('cmsPanel.heading')}</h2>
+        <button className="ghost" title={t('cmsPanel.newCollection')} onClick={() => setCreating(true)}>
           <PlusIcon size={14} />
         </button>
       </div>
@@ -73,7 +75,7 @@ export default function CmsPanel({
             <CmsIcon size={14} />
             <input
               autoFocus
-              placeholder="Collection name"
+              placeholder={t('cmsPanel.collectionName')}
               onBlur={(e) => create(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') e.currentTarget.blur();
@@ -107,7 +109,7 @@ export default function CmsPanel({
                 </span>
                 <button
                   className="ghost row-action"
-                  title="Collection settings"
+                  title={t('cmsPanel.collectionSettings')}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!c.error) onOpenSettings(c.rel);
@@ -126,10 +128,10 @@ export default function CmsPanel({
 
         {collections.length === 0 && !creating && (
           <div className="props-empty">
-            No JSON data found in <code>src/</code>.
+            {t('cmsPanel.empty')}
             <div style={{ marginTop: 10 }}>
               <button className="primary" onClick={() => setCreating(true)}>
-                New collection
+                {t('cmsPanel.newCollection')}
               </button>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useT } from '../i18n/I18nContext.jsx';
 import { HTML_TAGS, VOID_TAGS } from '../elementSchemas.js';
 import { elementIcon } from '../ui/Icons.jsx';
 import Dropdown from '../ui/Dropdown.jsx';
@@ -76,14 +77,15 @@ export default function PropsPanel({
   const allowAttrs = useAppStore(selectAllowAttrs);
   const linkContext = useAppStore(selectLinkContext);
   const loopContext = useAppStore(selectLoopContext);
+  const t = useT();
 
   if (!node) {
     return (
       <div className="panel-section grow" style={{ flex: '1 1 50%' }}>
         <div className="panel-header">
-          <h2>Settings</h2>
+          <h2>{t('propsPanel.settings')}</h2>
         </div>
-        <div className="props-empty">Select a component to edit its props.</div>
+        <div className="props-empty">{t('propsPanel.empty')}</div>
       </div>
     );
   }
@@ -94,15 +96,14 @@ export default function PropsPanel({
       <div className="panel-section grow" style={{ flex: '1 1 50%', overflow: 'hidden' }}>
         <div className="props-title">
           <CodeIcon size={14} className="props-title-icon" />
-          Frontmatter
+          {t('propsPanel.frontmatter')}
         </div>
         <div className="props-field" style={{ marginTop: 4 }}>
           <button className="primary" style={{ width: '100%' }} onClick={onOpenCode}>
-            <CodeIcon size={13} /> Edit code
+            <CodeIcon size={13} /> {t('propsPanel.editCode')}
           </button>
           <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5 }}>
-            Imports, constants, and data for this page. Opens in a floating
-            editor you can move and resize while working with the canvas.
+            {t('propsPanel.frontmatterDesc')}
           </div>
         </div>
       </div>
@@ -114,11 +115,11 @@ export default function PropsPanel({
     return (
       <div className="panel-section grow" style={{ flex: '1 1 50%', overflow: 'hidden' }}>
         <div className="panel-header">
-          <h2>Expression</h2>
+          <h2>{t('propsPanel.expression')}</h2>
         </div>
         <div className="props-field" style={{ marginTop: 8 }}>
           <label>
-            <span className="prop-label">Code</span>
+            <span className="prop-label">{t('propsPanel.code')}</span>
           </label>
           <ExprInput
             key={node.id}
@@ -137,7 +138,7 @@ export default function PropsPanel({
     return (
       <div className="panel-section grow" style={{ flex: '1 1 50%', overflow: 'hidden' }}>
         <div className="panel-header">
-          <h2>Loop</h2>
+          <h2>{t('propsPanel.loop')}</h2>
         </div>
         <MapEditor key={node.id} node={node} loopContext={loopContext} onSetText={onSetText} />
       </div>
@@ -149,13 +150,13 @@ export default function PropsPanel({
     return (
       <div className="panel-section grow" style={{ flex: '1 1 50%', overflow: 'hidden' }}>
         <div className="panel-header">
-          <h2>Comment</h2>
+          <h2>{t('propsPanel.comment')}</h2>
         </div>
         <div className="props-field" style={{ marginTop: 8 }}>
           <label>
             <span className="prop-label">
               <CommentIcon size={12} className="prop-label-icon" />
-              Comment
+              {t('propsPanel.comment')}
             </span>
           </label>
           <AutoTextarea
@@ -193,11 +194,10 @@ export default function PropsPanel({
         )}
         <div className="props-field" style={{ marginTop: 4 }}>
           <button className="primary" style={{ width: '100%' }} onClick={onOpenCode}>
-            <CodeIcon size={13} /> Edit code
+            <CodeIcon size={13} /> {t('propsPanel.editCode')}
           </button>
           <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5 }}>
-            Opens the {language} in a floating editor you can move and resize
-            while working with the canvas.
+            {t('propsPanel.codeEditorDesc', { language })}
           </div>
         </div>
       </div>
@@ -209,13 +209,13 @@ export default function PropsPanel({
     return (
       <div className="panel-section grow" style={{ flex: '1 1 50%', overflow: 'hidden' }}>
         <div className="panel-header">
-          <h2>Text</h2>
+          <h2>{t('propsPanel.text')}</h2>
         </div>
         <div className="props-field" style={{ marginTop: 8 }}>
           <label>
             <span className="prop-label">
               <VariableTextSizeIcon size={12} className="prop-label-icon" />
-              Content
+              {t('propsPanel.content')}
             </span>
           </label>
           <AutoTextarea
@@ -248,18 +248,10 @@ export default function PropsPanel({
     extraProps = extraProps.filter((k) => k === 'class' || k === 'slot');
   }
 
-  // Content field: shown when the children are inline-only (text plus simple
-  // tags like <strong>/<em>), edited with the rich inline editor. An element
-  // that's still empty — a just-inserted <h1> or <p> — has no inline children
-  // to detect, so offer the editor there too; otherwise there'd be no way to
-  // type its first words. Void tags can't hold content at all.
   const isEmpty = !Array.isArray(node.children) || node.children.length === 0;
   const canHoldText =
     node.kind === 'element' && !VOID_TAGS.has(String(node.name).toLowerCase());
   const showContentField = isInlineOnly(node.children) || (isEmpty && canHoldText);
-  // <slot> does take children, but they're the fallback Astro renders only
-  // when the caller passes nothing — labelling it "Content" reads as if it
-  // were what shows on the page.
   const isSlot = node.kind === 'element' && node.name === 'slot';
 
   return (
@@ -271,7 +263,7 @@ export default function PropsPanel({
           <ElementComponentIcon size={16} className="props-title-icon" />
         )}
         {isLayout ? currentLayoutName || node.name : node.name}
-        {isLayout && <span className="badge">layout</span>}
+        {isLayout && <span className="badge">{t('propsPanel.layoutBadge')}</span>}
       </div>
       <div className="panel-body" style={{ padding: 0 }}>
         {node.kind === 'element' && onChangeTag && (
@@ -282,7 +274,7 @@ export default function PropsPanel({
             <label>
               <span className="prop-label">
                 <ComponentPropertiesIcon size={12} className="prop-label-icon" />
-                Layout
+                {t('propsPanel.layout')}
               </span>
             </label>
             <Dropdown
@@ -290,8 +282,6 @@ export default function PropsPanel({
               className=""
               placeholder=""
               options={[
-                // Keep an unresolvable wrapper (not one of the scanned layout
-                // files) selectable rather than showing an empty trigger.
                 ...(currentLayoutName && !layouts.some((l) => l.name === currentLayoutName)
                   ? [{ value: currentLayoutName, label: currentLayoutName }]
                   : []),
@@ -306,7 +296,7 @@ export default function PropsPanel({
             <label>
               <span className="prop-label">
                 <VariableTextSizeIcon size={12} className="prop-label-icon" />
-                {isSlot ? 'Fallback' : 'Content'}
+                {isSlot ? t('propsPanel.fallback') : t('propsPanel.content')}
               </span>
             </label>
             <RichContent
@@ -317,8 +307,7 @@ export default function PropsPanel({
           />
             {isSlot && (
               <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 6, lineHeight: 1.5 }}>
-                Shown only when whatever uses this component passes nothing for
-                the slot.
+                {t('propsPanel.slotFallbackHint')}
               </div>
             )}
           </div>
@@ -372,8 +361,8 @@ export default function PropsPanel({
           !showContentField && (
             <div className="props-empty">
               {node.kind === 'element'
-                ? 'This HTML element has no attributes set.'
-                : 'This component declares no props (add an interface Props or an Astro.props destructure to expose some).'}
+                ? t('propsPanel.noAttrsSet')
+                : t('propsPanel.noPropsDeclared')}
             </div>
           )}
       </div>
@@ -423,6 +412,7 @@ function AttributesSection({
   onSetProp,
   onRenameProp,
 }: AttributesSectionProps) {
+  const t = useT();
   const [editor, setEditor] = useState<AttrEditorPos | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -441,10 +431,10 @@ function AttributesSection({
       <label style={{ display: 'flex', alignItems: 'center' }}>
         <span className="prop-label">
           <BracesIcon size={12} className="prop-label-icon" />
-          Attributes
+          {t('propsPanel.attributes')}
         </span>
         <span style={{ flex: 1 }} />
-        <button className="ghost" title="Add attribute" onClick={() => openEditor(null)}>
+        <button className="ghost" title={t('propsPanel.addAttribute')} onClick={() => openEditor(null)}>
           <PlusIcon size={12} />
         </button>
       </label>
@@ -462,7 +452,7 @@ function AttributesSection({
               <span className="attr-value">{decodeAttr(node.props?.[name])}</span>
               <button
                 className="row-action"
-                title="Delete attribute"
+                title={t('propsPanel.deleteAttribute')}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (editor?.attr === name) setEditor(null);
@@ -488,7 +478,6 @@ function AttributesSection({
           onCommitName={(newName) => {
             const clean = newName.trim();
             if (editor.attr === null) {
-              // New attribute: created once a valid name exists.
               if (clean && !node.props?.[clean]) {
                 onSetProp?.(clean, { type: 'bare' }, true);
                 setEditor((e) => (e ? { ...e, attr: clean } : e));
@@ -531,27 +520,18 @@ function AttrEditor({
   onChangeValue,
   onClose,
 }: AttrEditorProps) {
+  const t = useT();
   const [draftName, setDraftName] = useState(name);
   const [draftValue, setDraftValue] = useState(value);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Whether the value is an {expression} is settled when the popover opens,
-  // so the field can't change shape halfway through typing one. The name is
-  // read as typed: renaming style → styles turns the CSS editor back into a
-  // plain input right away.
   const [isExpr] = useState(() => /^\{[\s\S]*\}$/.test(value));
   const isStyleName = draftName.trim().toLowerCase() === 'style';
 
-  // The asset picker is always one click away, and starts on when the value
-  // already names a file in public/ — that's the case where the plain text
-  // field is never what you wanted.
   const [assetMode, setAssetMode] = useState(() => !isStyleName && looksLikeAssetPath(value));
 
   const isStyleValue = isStyleName && !isExpr && !assetMode;
 
-  // Only the field that mounts with the popover takes focus. Renaming swaps
-  // the value field, and a freshly mounted one grabbing focus there would
-  // pull the caret out of the name box mid-word.
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
@@ -582,26 +562,20 @@ function AttrEditor({
       style={{ top: pos.top, left: pos.left, width: pos.width }}
     >
       <div className="attr-editor-row">
-        <span>Name</span>
+        <span>{t('propsPanel.attrName')}</span>
         <input
           autoFocus={isNew}
           value={draftName}
-          placeholder="data-attribute"
+          placeholder={t('propsPanel.attrNamePlaceholder')}
           spellCheck={false}
           onChange={(e) => setDraftName(e.target.value.replace(/[^\w@:.-]/g, ''))}
           onBlur={commitName}
           onKeyDown={(e) => e.key === 'Enter' && (commitName(), e.currentTarget.blur())}
         />
       </div>
-      {/* The field sits beside its label like the name row, whichever kind it
-          is; `top` just stops the label and toggle from centring against a
-          tall field. */}
       <div className={`attr-editor-row ${isStyleValue || assetMode ? 'top' : ''}`}>
-        <span>Value</span>
+        <span>{t('propsPanel.attrValue')}</span>
         {isStyleValue ? (
-          // A style attribute is CSS, so edit it as CSS — one declaration per
-          // line, highlighted. An {expression} value stays a plain field:
-          // it's JavaScript, and the CSS mode would mangle it.
           <StyleEditor
             value={draftValue}
             autoFocus={focusValue}
@@ -629,7 +603,7 @@ function AttrEditor({
           <input
             autoFocus={focusValue}
             value={draftValue}
-            placeholder="value or {expression}"
+            placeholder={t('propsPanel.attrValuePlaceholder')}
             spellCheck={false}
             onChange={(e) => {
               setDraftValue(e.target.value);
@@ -640,7 +614,7 @@ function AttrEditor({
         )}
         <button
           className={`attr-asset-toggle ${assetMode ? 'on' : ''}`}
-          title={assetMode ? 'Edit as a plain value' : 'Choose a file from public/'}
+          title={assetMode ? t('propsPanel.editPlainValue') : t('propsPanel.chooseFile')}
           onClick={() => setAssetMode((v) => !v)}
         >
           <ElementImageIcon size={12} />
@@ -715,6 +689,7 @@ interface ObjectAttrsFieldProps {
 }
 
 function ObjectAttrsField({ pill, menu, entries, onCommit }: ObjectAttrsFieldProps) {
+  const t = useT();
   const [editor, setEditor] = useState<RowEditorPos | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -733,7 +708,7 @@ function ObjectAttrsField({ pill, menu, entries, onCommit }: ObjectAttrsFieldPro
       <label style={{ display: 'flex', alignItems: 'center' }}>
         {pill}
         <span style={{ flex: 1 }} />
-        <button className="ghost" title="Add attribute" onClick={() => openEditor(null)}>
+        <button className="ghost" title={t('propsPanel.addAttribute')} onClick={() => openEditor(null)}>
           <PlusIcon size={12} />
         </button>
         {menu}
@@ -752,7 +727,7 @@ function ObjectAttrsField({ pill, menu, entries, onCommit }: ObjectAttrsFieldPro
               <span className="attr-value">{decodeRaw(en.raw)}</span>
               <button
                 className="row-action"
-                title="Delete attribute"
+                title={t('propsPanel.deleteAttribute')}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (editor?.index === i) setEditor(null);
@@ -816,15 +791,12 @@ function parseMapHead(head: string): MapFields | null {
   return m ? { data: m[1].trim(), item: m[2], index: m[3] || '' } : null;
 }
 
+
 const IDENT_RE = /^[A-Za-z_$][\w$]*$/;
 
-// "No source yet" has to be written as real code, since the head is what
-// lands in the page. An empty literal is valid, renders nothing, and — unlike
-// a placeholder name like `items` — can't throw "items is not defined" and
-// take the whole preview down before the user has picked anything.
 const NO_SOURCE = '[]';
-const CUSTOM_SOURCE = '__custom__'; // not a valid expression, so it can't collide
-const DEFAULT_ITEM = 'item'; // a value no expression can collide with
+const CUSTOM_SOURCE = '__custom__';
+const DEFAULT_ITEM = 'item';
 
 interface MapEditorProps {
   node: Extract<AstroNode, { kind: 'map' }>;
@@ -833,16 +805,13 @@ interface MapEditorProps {
 }
 
 function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
+  const t = useT();
   const parsed = parseMapHead(node.head);
   const [fields, setFields] = useState(parsed || { data: '', item: '', index: '' });
   const lastBuiltRef = useRef(node.head);
 
-  // Everything on the page that can actually be looped: frontmatter lists,
-  // imports, the items of enclosing loops.
   const sources = React.useMemo(
     () => dataSuggestions(loopContext || {}, ''),
-    // loopContext is rebuilt per render in App, so key on its contents.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(loopContext || {})]
   );
   const isCustomData = (data: string) => {
@@ -851,7 +820,6 @@ function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
   };
   const [custom, setCustom] = useState(() => isCustomData(fields.data));
 
-  // External changes (undo, file reload, code edits below) re-sync fields.
   useEffect(() => {
     if (node.head !== lastBuiltRef.current) {
       const p = parseMapHead(node.head);
@@ -861,7 +829,6 @@ function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
       }
       lastBuiltRef.current = node.head;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.head]);
 
   // Typing only updates local state; the head is written on blur/Enter/pick
@@ -871,12 +838,9 @@ function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
     setFields(next);
     const itemOk = IDENT_RE.test(next.item);
     const indexOk = !next.index || IDENT_RE.test(next.index);
-    if (!next.data.trim() || !itemOk || !indexOk) return; // incomplete — don't write broken code
+    if (!next.data.trim() || !itemOk || !indexOk) return;
     const head = `${next.data.trim()}.map((${next.item}${next.index ? `, ${next.index}` : ''}) => (`;
     if (head === node.head) return;
-    // Renaming the item or index has to carry into the children that
-    // reference it. Only a rename counts — adding or removing an index
-    // leaves nothing to point the old name at.
     const prev = parseMapHead(node.head);
     const renames: LoopRename[] = [];
     if (prev) {
@@ -913,7 +877,7 @@ function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
         <>
           <div className="props-field" style={{ marginTop: 8 }}>
             <label>
-              <span className="prop-label">Data</span>
+              <span className="prop-label">{t('propsPanel.mapData')}</span>
             </label>
             <Dropdown
               livePreview={false}
@@ -921,14 +885,12 @@ function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
               placeholder=""
               value={custom ? CUSTOM_SOURCE : isNoSource ? '' : fields.data.trim()}
               options={[
-                { value: '', label: 'None' },
+                { value: '', label: t('common.none') },
                 ...sources.map((s) => ({ value: s.insert, label: s.insert })),
-                { value: CUSTOM_SOURCE, label: 'Custom…' },
+                { value: CUSTOM_SOURCE, label: t('propsPanel.mapCustom') },
               ]}
               onChange={(v) => {
                 if (v === CUSTOM_SOURCE) {
-                  // Start the field empty rather than showing the `[]` that
-                  // stands for "none" — that's an implementation detail.
                   setCustom(true);
                   if (!isCustomData(fields.data)) update({ data: '' });
                   return;
@@ -943,7 +905,7 @@ function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
                   autoFocus
                   value={fields.data}
                   syncValue={fields.data}
-                  placeholder="e.g. Astro.props.items"
+                  placeholder={t('propsPanel.mapCustomPlaceholder')}
                   onChange={(v) => update({ data: v })}
                   onCommit={(v) => commitSource(v)}
                 />
@@ -952,11 +914,11 @@ function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
           </div>
           <div className="props-field">
             <label>
-              <span className="prop-label">Item name</span>
+              <span className="prop-label">{t('propsPanel.mapItemName')}</span>
             </label>
             <input
               value={fields.item}
-              placeholder="e.g. service"
+              placeholder={t('propsPanel.mapItemPlaceholder')}
               spellCheck={false}
               style={itemBad ? { borderColor: 'var(--red)' } : undefined}
               onChange={(e) => update({ item: e.target.value })}
@@ -966,12 +928,12 @@ function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
           </div>
           <div className="props-field">
             <label>
-              <span className="prop-label">Index name</span>
-              <span className="type-tag">optional</span>
+              <span className="prop-label">{t('propsPanel.mapIndexName')}</span>
+              <span className="type-tag">{t('propsPanel.optional')}</span>
             </label>
             <input
               value={fields.index}
-              placeholder="e.g. index"
+              placeholder={t('propsPanel.mapIndexPlaceholder')}
               spellCheck={false}
               style={indexBad ? { borderColor: 'var(--red)' } : undefined}
               onChange={(e) => update({ index: e.target.value })}
@@ -985,14 +947,14 @@ function MapEditor({ node, loopContext, onSetText }: MapEditorProps) {
           className="props-field"
           style={{ marginTop: 8, fontSize: 11, color: 'var(--text-faint)' }}
         >
-          Custom loop code — edit it below.
+          {t('propsPanel.mapCustomLoopCode')}
         </div>
       )}
       <div className="props-field" style={{ marginTop: parseableNow ? 2 : 0 }}>
         <label>
           <span className="prop-label">
             <CodeIcon size={12} className="prop-label-icon" />
-            Code
+            {t('propsPanel.code')}
           </span>
         </label>
         <ExprInput
@@ -1014,6 +976,7 @@ interface TagFieldProps {
 }
 
 function TagField({ tag, onChangeTag }: TagFieldProps) {
+  const t = useT();
   const [draft, setDraft] = useState(tag);
   const [focused, setFocused] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -1043,10 +1006,10 @@ function TagField({ tag, onChangeTag }: TagFieldProps) {
     }
     const r = wrapRef.current.getBoundingClientRect();
     setPopupPos({ left: r.left, top: r.bottom + 4, width: r.width });
-  }, [matches.length, draft]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [matches.length, draft]);
 
-  const commit = (t: string) => {
-    const clean = String(t).trim().toLowerCase();
+  const commit = (newTag: string) => {
+    const clean = String(newTag).trim().toLowerCase();
     if (/^[a-z][a-z0-9-]*$/.test(clean) && clean !== tag) onChangeTag?.(clean);
     else setDraft(tag);
   };
@@ -1077,7 +1040,7 @@ function TagField({ tag, onChangeTag }: TagFieldProps) {
       <label>
         <span className="prop-label">
           <TagIcon size={12} className="prop-label-icon" />
-          Tag
+          {t('propsPanel.tag')}
         </span>
       </label>
       <input
@@ -1100,18 +1063,18 @@ function TagField({ tag, onChangeTag }: TagFieldProps) {
           className="dd-popup class-suggest"
           style={{ left: popupPos.left, top: popupPos.top, width: popupPos.width }}
         >
-          {matches.map((t, i) => (
+          {matches.map((tag, i) => (
             <div
-              key={t}
+              key={tag}
               className={`dd-option ${i === highlight ? 'highlight' : ''}`}
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setHighlight(i)}
               onClick={() => {
-                commit(t);
+                commit(tag);
                 inputRef.current?.blur();
               }}
             >
-              <span className="dd-option-label">{t}</span>
+              <span className="dd-option-label">{tag}</span>
             </div>
           ))}
         </div>
@@ -1139,6 +1102,7 @@ function PropField({
   linkContext,
   onChange,
 }: PropFieldProps) {
+  const t = useT();
   const { name, type } = field;
   const isSet = value !== undefined;
   const [menuPos, setMenuPos] = useState<{ left: number; top: number } | null>(null);
@@ -1161,7 +1125,7 @@ function PropField({
   const pill = (
     <span
       className={`prop-label${isSet ? ' set' : ''}`}
-      title={isSet ? '⌥-click to reset to default' : undefined}
+      title={isSet ? t('propsPanel.optionClickToReset') : undefined}
       onClick={onLabelClick}
     >
       {type === 'number' && <FieldNumberIcon size={12} className="prop-label-icon" />}
@@ -1186,7 +1150,6 @@ function PropField({
     </label>
   );
 
-  // Attributes-object props (containerAttrs etc.) edit as name/value rows.
   if (type === 'attrs') {
     const src = value?.type === 'expr' ? value.value : null;
     const entries =
@@ -1207,11 +1170,8 @@ function PropField({
         />
       );
     }
-    // Unparsable (nested objects, spreads) — fall through to the generic
-    // expression field below.
   }
 
-  // Class-list props edit as tags with project-wide class autocomplete.
   if (
     /class(es)?$/i.test(name) &&
     name !== 'slot' &&
@@ -1234,12 +1194,9 @@ function PropField({
     );
   }
 
-  // The slot attribute picks which of the parent component's slots this node
-  // fills. Unset = the default slot.
   if (name === 'slot' && Array.isArray(slotOptions) && slotOptions.length) {
     const raw = propValue(value);
     const named = slotOptions.filter((s) => s !== 'default');
-    // Keep an out-of-list current value selectable rather than losing it.
     const opts = [
       { value: '', label: 'default', dim: true },
       ...(raw && raw !== 'default' && !named.includes(raw) ? [{ value: raw, label: raw }] : []),
@@ -1269,8 +1226,8 @@ function PropField({
     // The default option is encoded as '' (= prop not set), so an unset prop
     // shows its default as the selected option and picking the default
     // resets the prop rather than writing it out explicitly.
+
     const cur = raw === undefined || raw === defaultStr ? '' : raw;
-    // Keep an out-of-schema current value selectable rather than losing it.
     const opts =
       raw === undefined || field.options.includes(raw)
         ? field.options
@@ -1280,7 +1237,7 @@ function PropField({
         {label}
         <Dropdown
           value={cur}
-          placeholder="(not set)"
+          placeholder={t('propsPanel.notSet')}
           options={opts.map((o: any) => ({ value: o === defaultStr ? '' : o, label: o }))}
           className=""
           onChange={(v: any) =>
@@ -1348,8 +1305,6 @@ function PropField({
   const str = propValue(value) ?? '';
   const isExpr = value?.type === 'expr';
 
-  // href gets the Webflow-style link settings: URL / page / section / email /
-  // phone / asset, all compiling down to one href string.
   if (name === 'href' && !isExpr && linkContext) {
     return (
       <div className="props-field">
@@ -1363,8 +1318,6 @@ function PropField({
     );
   }
 
-  // Media attributes, and any other prop whose value already names a file in
-  // public/ (image="/img/hero.png"), get the asset picker.
   const isMediaAttr = name === 'src' || name === 'poster';
   if (!isExpr && assetCtx?.projectPath && (isMediaAttr || looksLikeAssetPath(str))) {
     const nodeName = String(assetCtx.nodeName || '').toLowerCase();
@@ -1385,10 +1338,8 @@ function PropField({
         <AssetField
           value={str}
           mediaKind={mediaKind}
-          // A non-media prop only lands here because its value is an asset
-          // path, so open in asset mode; "Text" is the way back out.
           initialMode={isMediaAttr ? undefined : 'asset'}
-          plainLabel={isMediaAttr ? 'URL' : 'Text'}
+          plainLabel={isMediaAttr ? t('propsPanel.url') : t('propsPanel.textLabel')}
           projectPath={assetCtx.projectPath}
           onChange={(v, immediate) =>
             v === '' ? onChange(undefined, immediate) : onChange({ type: 'string', value: v }, immediate)
@@ -1435,6 +1386,7 @@ interface ResetMenuProps {
 }
 
 function ResetMenu({ pos, onReset, onClose }: ResetMenuProps) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1464,7 +1416,7 @@ function ResetMenu({ pos, onReset, onClose }: ResetMenuProps) {
     <div ref={ref} className="prop-menu" style={{ left: pos.left, top: pos.top }}>
       <div className="prop-menu-item" onClick={onReset}>
         <ResetIcon size={12} />
-        Reset to default property value
+        {t('propsPanel.resetToDefault')}
       </div>
     </div>
   );
