@@ -16,6 +16,8 @@ import {
   elementIcon,
 } from '../ui/Icons.jsx';
 import { useAppStore } from '../store/index';
+import { selectModel } from '../store/selectors';
+import { pathOfNode } from '../model/nodes';
 
 // The overlay label wears the same icon the Navigator row does, so a node
 // looks the same wherever you meet it.
@@ -54,6 +56,38 @@ interface DeviceInfo {
   width: number | null;
 }
 
+export interface PreviewNodeHit {
+  scope: string | null;
+  path: string | null;
+  pagePath: string | null;
+  occurrence: number;
+}
+
+interface PreviewRect { x: number; y: number; w: number; h: number }
+
+const isNullableString = (value: unknown): value is string | null =>
+  value === null || typeof value === 'string';
+const isPreviewRect = (value: unknown): value is PreviewRect => {
+  if (!value || typeof value !== 'object') return false;
+  const rect = value as Record<string, unknown>;
+  return ['x', 'y', 'w', 'h'].every((key) => typeof rect[key] === 'number' && Number.isFinite(rect[key]));
+};
+const isPreviewRectArray = (value: unknown): value is PreviewRect[] =>
+  Array.isArray(value) && value.every(isPreviewRect);
+const parseRectRecord = (value: unknown): Record<string, PreviewRect[]> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value);
+  if (!entries.every(([, rects]) => rects === null || isPreviewRectArray(rects))) return null;
+  return Object.fromEntries(entries.map(([path, rects]) => [path, rects ?? []]));
+};
+const parseNodeHit = (value: Record<string, unknown>): PreviewNodeHit | null => {
+  const occurrence = value.occurrence;
+  if (!isNullableString(value.scope) || !isNullableString(value.path) ||
+      !isNullableString(value.pagePath) || typeof occurrence !== 'number' ||
+      !Number.isFinite(occurrence) || occurrence < 0 || !Number.isInteger(occurrence)) return null;
+  return { scope: value.scope, path: value.path, pagePath: value.pagePath, occurrence };
+};
+
 // Desktop fills the canvas (width: null = fill).
 const DEVICES: DeviceInfo[] = [
   { key: 'desktop', Icon: DesktopIcon, title: 'Desktop — 1', width: null },
@@ -73,9 +107,11 @@ interface PreviewPaneProps {
   onRestart?: () => void;
   selPath?: string | null;
   navHoverPath?: string | null;
+  activeScope?: string | null;
+  pageScope?: string | null;
   overlayInfo?: (p: string) => OutlineInfo | null;
-  onSelectPath?: (p: string | null) => void;
-  onOpenPath?: (p: string) => void;
+  onSelectNode?: (hit: PreviewNodeHit) => void;
+  onOpenNode?: (hit: PreviewNodeHit) => void;
   focusPath?: string | null;
   device?: string;
   onDevice?: (d: string) => void;
@@ -90,9 +126,11 @@ export default function PreviewPane({
   onRestart,
   selPath,
   navHoverPath,
+  activeScope,
+  pageScope,
   overlayInfo,
-  onSelectPath,
-  onOpenPath,
+  onSelectNode,
+  onOpenNode,
   focusPath,
   onDevice,
   onFrameMounted,
@@ -111,6 +149,10 @@ export default function PreviewPane({
   const [customH, setCustomH] = React.useState<number | null>(null); // null = fill height
   const [resizing, setResizing] = React.useState(false);
   const url = devUrl && route ? devUrl + route : null;
+  const previewOrigin = React.useMemo(() => {
+    if (!url) return null;
+    try { return new URL(url).origin; } catch { return null; }
+  }, [url]);
   const width = customW ?? DEVICES.find((d) => d.key === device)?.width;
 
   // Deep trees produce long ancestor chains; showing every crumb shrinks them
@@ -136,67 +178,110 @@ export default function PreviewPane({
   // overlay in the frame, never inside the page itself.
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
   const [rects, setRects] = React.useState<Record<string, Array<{ x: number; y: number; w: number; h: number }>>>({});
+  const [focusRects, setFocusRects] = React.useState<Array<{ x: number; y: number; w: number; h: number }>>([]);
   const [canvasHover, setCanvasHover] = React.useState<string | null>(null);
 
-  const clickedPathRef = React.useRef<string | null>(null);
-  const lastClickRef = React.useRef<{ path: string | null; occ: number } | null>(null);
+  const clickedPathRef = React.useRef<{ scope: string | null; path: string | null } | null>(null);
+  const lastClickRef = React.useRef<{ scope: string | null; path: string | null; occ: number } | null>(null);
   const [selOcc, setSelOcc] = React.useState(0);
   const [hoverOcc, setHoverOcc] = React.useState(0);
 
   React.useEffect(() => {
-    if (lastClickRef.current?.path === selPath) {
+    const lastClick = lastClickRef.current;
+    if (lastClick && lastClick.scope === activeScope && lastClick.path === selPath) {
       lastClickRef.current = null;
       return;
     }
     lastClickRef.current = null;
     setSelOcc(0);
-  }, [selPath]);
+  }, [selPath, activeScope]);
 
   React.useEffect(() => {
     const onMsg = (e: MessageEvent) => {
-      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return;
+      if (!iframeRef.current || !previewOrigin || e.source !== iframeRef.current.contentWindow || e.origin !== previewOrigin) return;
       const d = e.data;
-      if (d?.type === 'avb:rects') setRects(d.rects || {});
-      else if (d?.type === 'avb:hover-node') {
-        setCanvasHover(d.path || null);
-        setHoverOcc(d.occurrence || 0);
-      } else if (d?.type === 'avb:click-node' && onSelectPath) {
-        clickedPathRef.current = d.path || null;
-        lastClickRef.current = { path: d.path || null, occ: d.occurrence || 0 };
-        setSelOcc(d.occurrence || 0);
-        onSelectPath(d.path || null);
-      } else if (d?.type === 'avb:open-node' && d.path && onOpenPath) {
-        onOpenPath(d.path);
+      if (!d || typeof d !== 'object') return;
+      if (d.type === 'avb:rects') {
+        const nextRects = parseRectRecord(d.rects);
+        if (!nextRects || !(d.focusRects === null || isPreviewRectArray(d.focusRects))) return;
+        setRects(nextRects);
+        setFocusRects(d.focusRects ?? []);
+      }
+      else if (d.type === 'avb:hover-node') {
+        const hit = parseNodeHit(d);
+        if (!hit || hit.scope !== activeScope) {
+          setCanvasHover(null);
+          setHoverOcc(0);
+        } else {
+          setCanvasHover(hit.path);
+          setHoverOcc(hit.occurrence);
+        }
+      } else if (d.type === 'avb:click-node' && onSelectNode) {
+        const hit = parseNodeHit(d);
+        if (!hit) return;
+        clickedPathRef.current = { scope: hit.scope, path: hit.path };
+        lastClickRef.current = { scope: hit.scope, path: hit.path, occ: hit.occurrence };
+        setSelOcc(hit.occurrence);
+        onSelectNode(hit);
+      } else if (d.type === 'avb:open-node' && onOpenNode) {
+        const hit = parseNodeHit(d);
+        if (hit) onOpenNode(hit);
       }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [onSelectPath, onOpenPath]);
+  }, [activeScope, previewOrigin, onSelectNode, onOpenNode]);
 
   const hoverPath = navHoverPath || canvasHover;
   const hoverOccUsed = navHoverPath ? null : hoverOcc;
-  const trackKey = [...new Set([selPath, hoverPath, focusPath].filter(Boolean))].join('|');
+
+  const model = useAppStore(selectModel);
+  const hiddenNodes = useAppStore((s) => s.hiddenNodes);
+  const hiddenPaths = React.useMemo((): string[] => {
+    if (!model || hiddenNodes.size === 0) return [];
+    const paths: string[] = [];
+    hiddenNodes.forEach((id) => {
+      const trail = pathOfNode(model.nodes, id);
+      if (trail) paths.push(trail.join('.'));
+    });
+    return paths;
+  }, [model, hiddenNodes]);
+
+  const trackKey = [...new Set([selPath, hoverPath].filter(Boolean))].join('|');
   const sendTrack = React.useCallback(() => {
     const w = iframeRef.current?.contentWindow;
-    if (!w) return;
-    w.postMessage({ type: 'avb:track', paths: trackKey ? trackKey.split('|') : [] }, '*');
-  }, [trackKey]);
+    if (!w || !previewOrigin) return;
+    w.postMessage({
+      type: 'avb:track',
+      activeScope,
+      pageScope,
+      paths: trackKey ? trackKey.split('|') : [],
+      focusPath,
+      hiddenPaths,
+    }, previewOrigin);
+  }, [activeScope, pageScope, trackKey, focusPath, hiddenPaths, previewOrigin]);
   React.useEffect(sendTrack, [sendTrack, url, refreshKey]);
 
   React.useEffect(() => {
     const w = iframeRef.current?.contentWindow;
-    if (!w || !selPath) return;
-    if (clickedPathRef.current === selPath) {
+    if (!w || !selPath || !previewOrigin) return;
+    const clickedPath = clickedPathRef.current;
+    if (clickedPath && clickedPath.scope === activeScope && clickedPath.path === selPath) {
       clickedPathRef.current = null;
       return;
     }
-    w.postMessage({ type: 'avb:scroll-to', path: selPath }, '*');
-  }, [selPath]);
+    w.postMessage({ type: 'avb:scroll-to', path: selPath }, previewOrigin);
+  }, [selPath, activeScope, previewOrigin]);
 
   React.useEffect(() => {
     setRects({});
+    setFocusRects([]);
     setCanvasHover(null);
-  }, [url, refreshKey]);
+    setHoverOcc(0);
+    setSelOcc(0);
+    clickedPathRef.current = null;
+    lastClickRef.current = null;
+  }, [url, refreshKey, activeScope]);
 
   const wrapRef = React.useRef<HTMLDivElement | null>(null);
   const frameRef = React.useRef<HTMLDivElement | null>(null);
@@ -364,7 +449,7 @@ export default function PreviewPane({
                 onLoad={sendTrack}
               />
               {focusPath &&
-                (rects[focusPath] || []).map((r, i) => (
+                focusRects.map((r, i) => (
                   <div
                     key={`focus-${i}`}
                     className="node-focus"
