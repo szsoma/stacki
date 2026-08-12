@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
+import { I18nProvider } from './i18n/I18nContext.jsx';
 
 const harness = vi.hoisted(() => ({ menu: new Map() }));
 
@@ -78,7 +79,7 @@ function setupAvb() {
 }
 
 async function openProjectWithPage() {
-  render(<App />);
+  render(<I18nProvider><App /></I18nProvider>);
   fireEvent.click(screen.getByRole('button', { name: 'Open project' }));
   await screen.findByTitle('Dev server: on');
   fireEvent.click(await screen.findByText('section'));

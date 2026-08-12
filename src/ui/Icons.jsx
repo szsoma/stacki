@@ -398,6 +398,23 @@ export const ElementButtonIcon = (p) => (
   </I>
 );
 
+export const EyeOffIcon = (p) => (
+  <I {...p}>
+    <path d="M3 3.5 13 12.5M5.8 5.8A4.5 4.5 0 0 0 3.5 8a5.6 5.6 0 0 0 9 3.6" />
+    <path d="M10.2 10.2A4.5 4.5 0 0 0 12.5 8a5.6 5.6 0 0 0-9-3.6" />
+    <path d="m2.8 2.5 10 10" />
+  </I>
+);
+
+export const EyeIcon = (p) => (
+  <I {...p}>
+    <path d="M2 8a5.6 5.6 0 0 1 10.4-3.2" />
+    <path d="M2 8a5.6 5.6 0 0 0 10.4 3.2" />
+    <path d="M8 8a2 2 0 1 1 0-3.8" />
+    <circle cx="8" cy="8" r="1.2" />
+  </I>
+);
+
 export const ResetIcon = (p) => (
   <I {...p}>
     <path d="M6.5 3.5 3.5 6.5l3 3" />

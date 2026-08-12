@@ -1,10 +1,38 @@
 // @ts-nocheck -- checkJs backlog; see docs/checkjs-migration.md
 import React, { useEffect, useRef } from 'react';
-import { EditorView, basicSetup } from 'codemirror';
+import {
+  EditorView,
+  lineNumbers,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  drawSelection,
+  dropCursor,
+  rectangularSelection,
+  crosshairCursor,
+  highlightActiveLine,
+  keymap,
+} from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { css } from '@codemirror/lang-css';
 import { javascript } from '@codemirror/lang-javascript';
-import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
+import {
+  syntaxHighlighting,
+  HighlightStyle,
+  foldGutter,
+  indentOnInput,
+  defaultHighlightStyle,
+  bracketMatching,
+  foldKeymap,
+} from '@codemirror/language';
+import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
+import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
+import {
+  closeBrackets,
+  autocompletion,
+  closeBracketsKeymap,
+  completionKeymap,
+} from '@codemirror/autocomplete';
+import { lintKeymap } from '@codemirror/lint';
 import { tags as t } from '@lezer/highlight';
 
 // CodeMirror 6 wrapper themed to match the app. Controlled-ish: `value` in,
@@ -92,7 +120,32 @@ export default function CodeEditor({ value, language, onChange }) {
       state: EditorState.create({
         doc: value ?? '',
         extensions: [
-          basicSetup,
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          highlightSpecialChars(),
+          history(),
+          foldGutter(),
+          drawSelection(),
+          dropCursor(),
+          EditorState.allowMultipleSelections.of(true),
+          indentOnInput(),
+          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          bracketMatching(),
+          closeBrackets(),
+          autocompletion(),
+          rectangularSelection(),
+          crosshairCursor(),
+          highlightActiveLine(),
+          highlightSelectionMatches(),
+          keymap.of([
+            ...closeBracketsKeymap,
+            ...defaultKeymap,
+            ...searchKeymap,
+            ...historyKeymap,
+            ...foldKeymap,
+            ...completionKeymap,
+            ...lintKeymap,
+          ]),
           lang,
           appTheme,
           appHighlight,

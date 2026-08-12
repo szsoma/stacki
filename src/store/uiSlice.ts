@@ -25,6 +25,7 @@ export interface UiSlice {
   cmsTick: number;
   cmsSettings: boolean;
   cmsJump: { rel: string; itemId: string } | null;
+  hiddenNodes: Set<string>;
   setLeftTab: (tab: LeftTab) => void;
   setRightTab: (tab: RightTab) => void;
   setCodeWin: (w: UiSlice['codeWin']) => void;
@@ -36,6 +37,7 @@ export interface UiSlice {
   setCmsTick: (v: number) => void;
   setCmsSettings: (v: boolean) => void;
   setCmsJump: (v: UiSlice['cmsJump']) => void;
+  toggleHiddenNode: (nodeId: string) => void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -52,6 +54,7 @@ export const createUiSlice: StateCreator<UiSlice, [], [], UiSlice> = (set) => ({
   cmsTick: 0,
   cmsSettings: false,
   cmsJump: null,
+  hiddenNodes: new Set(),
   setLeftTab: (leftTab) => set({ leftTab }),
   setRightTab: (rightTab) => set({ rightTab }),
   setCodeWin: (codeWin) => set({ codeWin }),
@@ -67,4 +70,11 @@ export const createUiSlice: StateCreator<UiSlice, [], [], UiSlice> = (set) => ({
   setCmsTick: (cmsTick) => set({ cmsTick }),
   setCmsSettings: (cmsSettings) => set({ cmsSettings }),
   setCmsJump: (cmsJump) => set({ cmsJump }),
+  toggleHiddenNode: (nodeId) =>
+    set((s) => {
+      const next = new Set(s.hiddenNodes);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return { hiddenNodes: next };
+    }),
 });

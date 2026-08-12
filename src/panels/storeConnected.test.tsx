@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAppStore } from '../store/index';
+import { I18nProvider } from '../i18n/I18nContext.jsx';
 import type { PageModel } from '../types/ast';
 import PreviewPane from './PreviewPane';
 import PropsPanel from './PropsPanel';
@@ -16,6 +17,10 @@ import StylePanel from './StylePanel';
 // so a selector that allocates per call takes the panel down with "Maximum
 // update depth exceeded" instead of rendering. These tests mount each panel
 // against real store state and fail loudly if that regresses.
+
+function renderWithProvider(el: React.ReactElement) {
+  return render(<I18nProvider>{el}</I18nProvider>);
+}
 
 class ResizeObserverStub {
   observe() {}
@@ -83,7 +88,7 @@ beforeEach(() => {
 
 describe('StructurePanel', () => {
   it('renders the tree from the store', () => {
-    render(<StructurePanel />);
+    renderWithProvider(<StructurePanel />);
     expect(screen.getByText('Navigator')).toBeInTheDocument();
     // The layout wrapper resolves through its import alias to the scanned name.
     expect(screen.getByText('BaseLayout')).toBeInTheDocument();
@@ -92,7 +97,7 @@ describe('StructurePanel', () => {
   });
 
   it('follows a selection made on the store', () => {
-    render(<StructurePanel />);
+    renderWithProvider(<StructurePanel />);
     expect(document.querySelector('.structure-node.selected')).toBeNull();
     act(() => useAppStore.getState().select('hero'));
     expect(document.querySelector('[data-node-id="hero"].selected')).toBeTruthy();
@@ -101,13 +106,13 @@ describe('StructurePanel', () => {
 
 describe('PropsPanel', () => {
   it('prompts for a selection when nothing is selected', () => {
-    render(<PropsPanel />);
+    renderWithProvider(<PropsPanel />);
     expect(screen.getByText(/Select a component to edit its props/i)).toBeInTheDocument();
   });
 
   it('renders the built-in attribute schema of the selected element', () => {
     useAppStore.getState().select('hero');
-    render(<PropsPanel />);
+    renderWithProvider(<PropsPanel />);
     // <a> contributes href/target/rel through the element schema.
     expect(screen.getByText('href')).toBeInTheDocument();
     expect(screen.getByText('target')).toBeInTheDocument();
@@ -115,14 +120,14 @@ describe('PropsPanel', () => {
 
   it('shows the layout badge and picker when the wrapper is selected', () => {
     useAppStore.getState().select('layout');
-    render(<PropsPanel />);
+    renderWithProvider(<PropsPanel />);
     expect(screen.getByText('layout')).toBeInTheDocument();
     // The panel title and the layout picker's trigger both name the layout.
     expect(screen.getAllByText('BaseLayout').length).toBeGreaterThanOrEqual(2);
   });
 
   it('re-renders when the selection changes on the store', () => {
-    render(<PropsPanel />);
+    renderWithProvider(<PropsPanel />);
     expect(screen.getByText(/Select a component to edit its props/i)).toBeInTheDocument();
     act(() => useAppStore.getState().select('hero'));
     expect(screen.getByText('href')).toBeInTheDocument();
@@ -130,32 +135,32 @@ describe('PropsPanel', () => {
 
   it('opens the frontmatter pseudo-node in its own editor', () => {
     useAppStore.getState().select('frontmatter');
-    render(<PropsPanel />);
+    renderWithProvider(<PropsPanel />);
     expect(screen.getByText(/frontmatter/i)).toBeInTheDocument();
   });
 });
 
 describe('StylePanel', () => {
   it('asks for a selection when nothing is selected', () => {
-    render(<StylePanel />);
+    renderWithProvider(<StylePanel />);
     expect(screen.getByText(/Select an element to style it/i)).toBeInTheDocument();
   });
 
   it('renders nothing without an open project', () => {
     useAppStore.setState({ project: null });
-    const { container } = render(<StylePanel />);
+    const { container } = renderWithProvider(<StylePanel />);
     expect(container).toBeEmptyDOMElement();
   });
 });
 
 describe('PreviewPane', () => {
   it('offers to start the dev server when it is off', () => {
-    render(<PreviewPane />);
+    renderWithProvider(<PreviewPane />);
     expect(screen.getByRole('button', { name: /Start dev server/i })).toBeInTheDocument();
   });
 
   it('follows the dev server status on the store', () => {
-    render(<PreviewPane />);
+    renderWithProvider(<PreviewPane />);
     act(() => useAppStore.getState().setDevStatus('starting'));
     expect(screen.getByText(/Starting Astro dev server/i)).toBeInTheDocument();
   });

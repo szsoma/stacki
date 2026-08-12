@@ -1516,6 +1516,12 @@ body > .embed-editor_bg-modal-backdrop > .embed-editor_grid-modal {
 .structure-node:hover .row-action { opacity: 1; }
 .structure-node .row-action:hover { color: var(--red); background: var(--bg-hover); }
 
+.structure-node.is-hidden { opacity: 0.45; }
+.structure-node.is-hidden .label { text-decoration: line-through; }
+.structure-node .row-action.visibility { color: var(--text-faint); }
+.structure-node .row-action.visibility:hover { color: var(--text); background: var(--bg-active); }
+.structure-node .row-action.visibility.off { color: var(--orange, #d97706); }
+
 /* Map/loop layers — purple */
 .structure-node.is-map,
 .structure-node.is-map:hover,

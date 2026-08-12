@@ -18,6 +18,8 @@ import {
   CollapseVerticalIcon,
   elementIcon,
   CustomElementIcon,
+  EyeIcon,
+  EyeOffIcon,
 } from '../ui/Icons.jsx';
 import { useAppStore } from '../store';
 import { selectCurrentLayoutName } from '../store/selectors';
@@ -66,6 +68,8 @@ interface NodeListCtx {
   onRemoveNode?: (nodeId: string) => void;
   toggleCollapse: (node: AstroNode) => void;
   openContextMenu: (x: number, y: number, nodeId: string) => void;
+  hiddenNodes: Set<string>;
+  toggleHiddenNode: (id: string) => void;
 }
 
 interface FoundNode {
@@ -99,6 +103,8 @@ export default function StructurePanel({
   const selectedId = useAppStore((s) => s.selectedId);
   const revealTick = useAppStore((s) => s.revealTick);
   const currentLayoutName = useAppStore(selectCurrentLayoutName);
+  const hiddenNodes = useAppStore((s) => s.hiddenNodes);
+  const toggleHiddenNode = useAppStore((s) => s.toggleHiddenNode);
   const t = useT();
   // dropTarget: {parentId, index} for gaps, {intoId} for node rows
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
@@ -343,6 +349,8 @@ export default function StructurePanel({
             onSelect?.(nodeId);
             setCtxMenu({ x, y, nodeId });
           }}
+          hiddenNodes={hiddenNodes}
+          toggleHiddenNode={toggleHiddenNode}
         />
 
         {model.nodes.length === 0 && (
@@ -560,6 +568,8 @@ function TreeNode({
     onOpenComponent,
     toggleCollapse,
     openContextMenu,
+    hiddenNodes,
+    toggleHiddenNode,
   } = ctx;
 
   const isLayoutNode = node.id === 'layout';
@@ -586,12 +596,14 @@ function TreeNode({
     label = currentLayoutName || (node as any).name;
   }
 
+  const isHidden = hiddenNodes.has(node.id);
+
   return (
     <>
       <div
         ref={rowRef}
         data-node-id={node.id}
-        className={`structure-node ${node.kind === 'component' && !node.dynamicTag ? 'is-component' : ''} ${node.kind === 'map' || (isDataBound(node) && !(node.kind === 'component' && !node.dynamicTag)) ? 'is-map' : ''} ${isLayoutNode ? 'layout-node' : ''} ${isSelected ? 'selected' : ''}`}
+        className={`structure-node ${node.kind === 'component' && !node.dynamicTag ? 'is-component' : ''} ${node.kind === 'map' || (isDataBound(node) && !(node.kind === 'component' && !node.dynamicTag)) ? 'is-map' : ''} ${isLayoutNode ? 'layout-node' : ''} ${isSelected ? 'selected' : ''} ${isHidden ? 'is-hidden' : ''}`}
         style={{
           paddingLeft: 6 + depth * 16,
           ...(isDropInto ? { borderColor: 'var(--accent)', background: 'var(--accent-soft)' } : {}),
@@ -656,6 +668,16 @@ function TreeNode({
         <span className="label" style={node.kind === 'text' ? { fontWeight: 400, fontStyle: 'italic' } : {}}>
           {label}
         </span>
+        <button
+          className={`row-action visibility ${isHidden ? 'off' : ''}`}
+          title={isHidden ? 'Show in DOM' : 'Hide from DOM'}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleHiddenNode(node.id);
+          }}
+        >
+          {isHidden ? <EyeOffIcon size={13} /> : <EyeIcon size={13} />}
+        </button>
       </div>
 
       {showChildren && !nodeCollapsed && (
