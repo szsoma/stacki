@@ -80,6 +80,38 @@ describe('selectedElementResolver', () => {
     expect(result.data.ownerComponent).toBeNull();
   });
 
+  it('uses the active component as owner for a component-local node tree', async () => {
+    const paragraph = {
+      id: 'section-copy',
+      kind: 'element',
+      name: 'p',
+      props: {},
+      children: [{ id: 'section-copy-text', kind: 'text', value: 'Component copy' }],
+    };
+    const localTree = [{
+      id: 'section-root',
+      kind: 'element',
+      name: 'section',
+      props: {},
+      children: [paragraph],
+    }];
+    const appState = baseAppState({
+      selectedNode: paragraph,
+      nodeTree: localTree,
+      currentComponent: { name: 'Section', path: '/projects/site/src/components/Section.astro' },
+      serializeNode: vi.fn(async () => '<p>Component copy</p>'),
+    });
+
+    const result = await selectedElementResolver.resolve(appState);
+    const markdown = selectedElementResolver.renderMarkdown({ data: result.data });
+
+    expect(result.data.ownerComponent).toEqual({
+      name: 'Section',
+      path: 'src/components/Section.astro',
+    });
+    expect(markdown).toContain('Owner component: Section (`src/components/Section.astro`)');
+  });
+
   it('renders tag, ancestors, owner, props, children, and markup as Markdown', () => {
     const snapshot = {
       data: {

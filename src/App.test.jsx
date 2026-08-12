@@ -373,6 +373,10 @@ describe('App terminal integration', () => {
     await waitFor(() => {
       expect(harness.terminalPanelProps.editorContext.selectedNode).toMatchObject({ id: 'about-heading' });
     });
+    expect(harness.terminalPanelProps.editorContext.currentComponent).toEqual({
+      name: 'About',
+      path: '/projects/one/src/components/About.astro',
+    });
     expect(terminalPanel.hidden).toBe(false);
 
     act(() => harness.previewPaneProps.onSelectNode({

@@ -46,13 +46,15 @@ function nodeRevisionKey(node) {
 // ancestor path would change on refresh without the stale key ever having
 // flagged it.
 function contextRevisionKey(appState, selectedNode) {
-  const { nodeTree = [], componentDefinitions = [], loopContext } = appState;
+  const { nodeTree = [], componentDefinitions = [], currentComponent, loopContext } = appState;
   const chain = ancestorChain(nodeTree, selectedNode.id);
   const ancestors = chain.slice(0, -1).map(summarizeNode);
   const owner = findOwningComponent(nodeTree, selectedNode.id, componentDefinitions);
   const json = JSON.stringify({
     ancestors,
-    owner: owner ? { name: owner.definition.name, path: owner.definition.path } : null,
+    owner: owner
+      ? { name: owner.definition.name, path: owner.definition.path }
+      : currentComponent || null,
     loopVariables: loopContext?.ancestorHeads || [],
   });
   return hashString(json);
@@ -71,7 +73,15 @@ export const selectedElementResolver = {
   },
 
   async resolve(appState) {
-    const { selectedNode, nodeTree = [], componentDefinitions = [], loopContext, projectPath, serializeNode } = appState;
+    const {
+      selectedNode,
+      nodeTree = [],
+      componentDefinitions = [],
+      currentComponent,
+      loopContext,
+      projectPath,
+      serializeNode,
+    } = appState;
     if (!selectedNode) throw new Error('No element is selected.');
 
     const chain = ancestorChain(nodeTree, selectedNode.id);
@@ -87,8 +97,11 @@ export const selectedElementResolver = {
       props: selectedNode.props || {},
       ancestors,
       children,
-      ownerComponent: owner
-        ? { name: owner.definition.name, path: toProjectRelativePath(projectPath, owner.definition.path) }
+      ownerComponent: owner || currentComponent
+        ? {
+            name: owner?.definition.name ?? currentComponent.name,
+            path: toProjectRelativePath(projectPath, owner?.definition.path ?? currentComponent.path),
+          }
         : null,
       loopVariables: loopContext?.ancestorHeads || [],
       markup,

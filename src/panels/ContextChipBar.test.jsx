@@ -25,13 +25,14 @@ function sectionEditorContext(selectedNode) {
     nodeTree: [
       {
         id: 'section',
-        kind: 'component',
-        name: 'Section',
+        kind: 'element',
+        name: 'section',
         props: {},
         children: [selectedNode],
       },
     ],
     componentDefinitions: [sectionDefinition],
+    currentComponent: sectionDefinition,
   };
 }
 

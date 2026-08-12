@@ -1719,6 +1719,9 @@ export default function App() {
       nodeTree: model?.nodes ?? [],
       loopContext,
       componentDefinitions: insertables,
+      currentComponent: currentPage?.kind === 'component'
+        ? { name: currentPage.name, path: currentPage.path }
+        : null,
       pageInfo: model
         ? {
             editable: true,
