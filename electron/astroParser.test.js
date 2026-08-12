@@ -11,6 +11,11 @@ const {
   serializePageMarked,
 } = astroParser;
 
+/**
+ * Test fixtures deliberately include serializer-only node metadata.
+ * @param {any[]} nodes
+ * @param {import('../src/types/ast').ImportDecl[]} imports
+ */
 function pageModel(nodes, imports = []) {
   return { imports, extraFrontmatter: '', nodes };
 }

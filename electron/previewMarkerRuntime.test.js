@@ -1,6 +1,31 @@
 // @vitest-environment jsdom
+import fs from 'node:fs';
+import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import previewMarkerRuntime from './previewMarkerRuntime.js';
+
+const preloadSource = fs.readFileSync(path.join(process.cwd(), 'electron/preload.js'), 'utf8');
+const sourceMatch = preloadSource.match(
+  /\/\* PREVIEW_MARKER_RUNTIME_START \*\/([\s\S]*?)\/\* PREVIEW_MARKER_RUNTIME_END \*\//
+);
+/** @typedef {{
+ *   MARKER_ATTR: string,
+ *   createPreviewMarkerRegistry: (document: Document) => {
+ *     collect: () => void,
+ *     markerTokensForSubtrees: (scope: string, paths: string[]) => string[],
+ *     nodeAt: (target: Node, scope: string) => {scope: string, path: string, occurrence: number} | null,
+ *     rectsFor: (scope: string, path: string) => {x: number, y: number, w: number, h: number}[] | null,
+ *   },
+ *   markerKey: (scope: string, path: string) => string,
+ *   markerToken: (scope: string, path: string) => string,
+ * }} PreviewMarkerRuntime */
+
+/** @type {PreviewMarkerRuntime} */
+const previewMarkerRuntime = sourceMatch
+  ? Function(
+      'Buffer',
+      `${sourceMatch[1]}; return { MARKER_ATTR, createPreviewMarkerRegistry, markerKey, markerToken };`
+    )(Buffer)
+  : /** @type {PreviewMarkerRuntime} */ ({});
 
 const {
   MARKER_ATTR,
@@ -11,21 +36,37 @@ const {
 const PAGE_SCOPE = 'src/pages/index.astro';
 const COMPONENT_SCOPE = 'src/components/Hero.astro';
 
+/** @param {string} edge @param {string} path @param {string} scope */
 const marker = (edge, path, scope) =>
   `<template data-avb-${edge}="${path}" data-avb-scope="${scope}"></template>`;
 
+/** @param {ParentNode} root @param {string} selector */
+const mustQuery = (root, selector) => {
+  const element = root.querySelector(selector);
+  if (!(element instanceof HTMLElement)) throw new Error(`Missing fixture element: ${selector}`);
+  return element;
+};
+
+/**
+ * @param {Element} element
+ * @param {{left: number, top: number, right: number, bottom: number}} rect
+ */
 const setRect = (element, { left, top, right, bottom }) => {
   element.getBoundingClientRect = () => ({
+    x: left,
+    y: top,
     left,
     top,
     right,
     bottom,
     width: right - left,
     height: bottom - top,
+    toJSON: () => ({}),
   });
 };
 
 describe('preview marker registry', () => {
+  /** @type {ReturnType<PreviewMarkerRuntime['createPreviewMarkerRegistry']>} */
   let registry;
 
   beforeEach(() => {
@@ -49,8 +90,14 @@ describe('preview marker registry', () => {
     registry.collect();
   });
 
+  it('is sourced inline from the sandbox-compatible preload', () => {
+    expect(sourceMatch).not.toBeNull();
+    expect(preloadSource).not.toMatch(/require\(['"]\.\/previewMarkerRuntime/);
+    expect(createPreviewMarkerRegistry).toBeTypeOf('function');
+  });
+
   it('resolves the deepest component path in the requested scope', () => {
-    expect(registry.nodeAt(document.querySelector('#first'), COMPONENT_SCOPE)).toEqual({
+    expect(registry.nodeAt(mustQuery(document, '#first'), COMPONENT_SCOPE)).toEqual({
       scope: COMPONENT_SCOPE,
       path: '0.0',
       occurrence: 0,
@@ -58,7 +105,7 @@ describe('preview marker registry', () => {
   });
 
   it('resolves the containing page path independently', () => {
-    expect(registry.nodeAt(document.querySelector('#first'), PAGE_SCOPE)).toEqual({
+    expect(registry.nodeAt(mustQuery(document, '#first'), PAGE_SCOPE)).toEqual({
       scope: PAGE_SCOPE,
       path: '0',
       occurrence: 0,
@@ -66,15 +113,15 @@ describe('preview marker registry', () => {
   });
 
   it('retains both scope tokens on clones and unions them into a single run', () => {
-    const page = document.querySelector('#page');
-    const clone = page.cloneNode(true);
+    const page = mustQuery(document, '#page');
+    const clone = /** @type {HTMLElement} */ (page.cloneNode(true));
     clone.id = 'page-clone';
     document.body.appendChild(clone);
 
-    expect(clone.querySelector('#first').getAttribute(MARKER_ATTR).split(' ')).toEqual(
+    expect((mustQuery(clone, '#first').getAttribute(MARKER_ATTR) || '').split(' ')).toEqual(
       expect.arrayContaining([markerToken(PAGE_SCOPE, '0'), markerToken(COMPONENT_SCOPE, '0')])
     );
-    expect(registry.nodeAt(clone.querySelector('#first'), COMPONENT_SCOPE)).toEqual({
+    expect(registry.nodeAt(mustQuery(clone, '#first'), COMPONENT_SCOPE)).toEqual({
       scope: COMPONENT_SCOPE,
       path: '0.0',
       occurrence: 0,
@@ -88,7 +135,7 @@ describe('preview marker registry', () => {
   });
 
   it('reports the second occurrence for repeated component paths', () => {
-    expect(registry.nodeAt(document.querySelector('#second'), COMPONENT_SCOPE)).toEqual({
+    expect(registry.nodeAt(mustQuery(document, '#second'), COMPONENT_SCOPE)).toEqual({
       scope: COMPONENT_SCOPE,
       path: '0.0',
       occurrence: 1,
@@ -96,9 +143,9 @@ describe('preview marker registry', () => {
   });
 
   it('keeps a clone of the second occurrence in occurrence 1 and unions its rectangle', () => {
-    const first = document.querySelector('#first');
-    const second = document.querySelector('#second');
-    const clone = second.cloneNode(true);
+    const first = mustQuery(document, '#first');
+    const second = mustQuery(document, '#second');
+    const clone = /** @type {HTMLElement} */ (second.cloneNode(true));
     clone.id = 'second-clone';
     document.body.appendChild(clone);
     setRect(first, { left: 0, top: 0, right: 100, bottom: 30 });
@@ -124,7 +171,7 @@ describe('preview marker registry', () => {
     ).join('');
     registry = createPreviewMarkerRegistry(document);
     registry.collect();
-    const target = document.body.lastElementChild;
+    const target = mustQuery(document.body, 'div:last-child');
     let reads = 0;
     const originalGetAttribute = target.getAttribute.bind(target);
     target.getAttribute = (...args) => {
@@ -140,8 +187,8 @@ describe('preview marker registry', () => {
   });
 
   it('isolates rects by scope for paths with the same local value', () => {
-    const page = document.querySelector('#page');
-    const component = document.querySelector('#component');
+    const page = mustQuery(document, '#page');
+    const component = mustQuery(document, '#component');
     setRect(page, { left: 0, top: 0, right: 300, bottom: 200 });
     setRect(component, { left: 25, top: 30, right: 275, bottom: 170 });
 
