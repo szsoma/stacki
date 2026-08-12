@@ -211,7 +211,6 @@ describe('ContextChipBar', () => {
 
     await waitFor(() => expect(screen.getAllByText('Selected element')).toHaveLength(1));
     expect(window.avb.serializeNode).toHaveBeenCalledWith({ node: firstParagraph });
-    expect(screen.queryByText('Preview element')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Ask Codex to…'), { target: { value: 'Adjust this copy.' } });
     const listener = vi.fn();

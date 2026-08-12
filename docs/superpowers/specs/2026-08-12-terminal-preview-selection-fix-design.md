@@ -2,12 +2,12 @@
 
 ## Problem
 
-The Preview element context feature requires the Terminal panel to remain visible while the user clicks elements in the design canvas. The current canvas-selection handler calls the store with `select(id, { reveal: true })`. In the selection store, `reveal: true` also sets `leftTab` to `navigator`, so the first canvas click replaces the Terminal panel with Navigator. The selection changes, but the workflow becomes unusable because the Terminal and its context chip disappear.
+The Selected element context feature requires the Terminal panel to remain visible while the user clicks elements in the design canvas. The current canvas-selection handler calls the store with `select(id, { reveal: true })`. In the selection store, `reveal: true` also sets `leftTab` to `navigator`, so the first canvas click replaces the Terminal panel with Navigator. The selection changes, but the workflow becomes unusable because the Terminal and its context chip disappear.
 
 ## Approved behavior
 
 - When Terminal is the active left panel, clicking a marked element in the design canvas selects that element without changing the active left panel.
-- The mounted Terminal context bar receives the new `selectedNode` and adds or refreshes its single Preview element chip.
+- The mounted Terminal context bar receives the new `selectedNode` and adds or refreshes its single Selected element chip.
 - When any other left panel is active, canvas selection keeps the existing reveal behavior and switches to Navigator so the selected row is visible.
 - Empty-canvas and component-focus behavior remain unchanged except for the same Terminal-preservation rule when a real selectable node is resolved.
 

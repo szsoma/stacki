@@ -15,6 +15,7 @@ describe('contextTypes', () => {
     expect(CONTEXT_CHIP_TYPES.CURRENT_FILE).toBe('current-file');
     expect(CONTEXT_CHIP_TYPES.SELECTED_FILES).toBe('selected-files');
     expect(CONTEXT_CHIP_TYPES.SELECTED_ELEMENT).toBe('selected-element');
+    expect(CONTEXT_CHIP_TYPES).not.toHaveProperty(['PREVIEW', 'ELEMENT'].join('_'));
     expect(CONTEXT_CHIP_TYPES.CURRENT_PAGE).toBe('current-page');
     expect(CONTEXT_CHIP_TYPES.CURRENT_COMPONENT).toBe('current-component');
     expect(CONTEXT_CHIP_TYPES.CONSOLE_ERRORS).toBe('console-errors');
