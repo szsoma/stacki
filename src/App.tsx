@@ -99,7 +99,7 @@ import {
 } from './model/loops.ts';
 import type { LoopRename } from './model/loops.ts';
 
-import { useAppStore, getState } from './store/index.ts';
+import { useAppStore, getState, setState } from './store/index.ts';
 import {
   nodeLabel,
   pathFor as pathForNode,
@@ -152,6 +152,7 @@ export default function App() {
   const rightTab = useAppStore((s) => s.rightTab);
   const assetPick = useAppStore((s) => s.assetPick);
   const insertOpen = useAppStore((s) => s.insertOpen);
+  const saveError = useAppStore((s) => s.saveError);
 
   // Local-only state (not in store)
   const [terminalMounted, setTerminalMounted] = useState(false);
@@ -172,8 +173,16 @@ export default function App() {
   const layoutSeq = useRef(0);
   const tabSelRef = useRef<string | null>(null);
   const fileSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigationSeq = useRef(0);
+  const projectLoadSeq = useRef(0);
 
   const s = getState;
+
+  useEffect(() => () => {
+    // Captured debounce persistence covers React remount/unmount only; renderer
+    // process shutdown requires a separate Electron main-process protocol.
+    if (!s().dirty) s().cancelScheduledSave();
+  }, [s]);
 
   // Every page/asset operation below is reachable only from panels that exist
   // once a project is open, so the project is never null by the time one runs.
@@ -240,6 +249,12 @@ export default function App() {
   }, [s]);
 
   useEffect(() => {
+    if (!saveError) return;
+    showToast(saveError, 'error');
+    s().clearSaveError();
+  }, [saveError, showToast, s]);
+
+  useEffect(() => {
     // @ts-expect-error IPC callback shape differs from declared type.
     const offProgress = window.avb.onProgress(({ message }: { message: any }) => s().setBusy(message || null));
     // @ts-expect-error IPC callback shape differs from declared type.
@@ -274,10 +289,14 @@ export default function App() {
   }, [s]);
 
   const startPreview = useCallback(
-    async (projectPath: string) => {
+    async (projectPath: string, projectRequest?: number) => {
+      const isCurrent = () => projectRequest === undefined ||
+        (projectRequest === projectLoadSeq.current && s().project?.path === projectPath);
+      if (!isCurrent()) return;
       s().setDevStatus('starting');
       try {
         const { url, external } = await window.avb.startDevServer(projectPath);
+        if (!isCurrent()) return;
         s().setDevUrl(url);
         s().setDevStatus('on');
         s().setDevDiag(null);
@@ -288,6 +307,7 @@ export default function App() {
           );
         }
       } catch (err) {
+        if (!isCurrent()) return;
         s().setDevStatus('off');
         s().setBusy(null);
         showToast(t('app.previewFailed'), 'error');
@@ -298,33 +318,97 @@ export default function App() {
     [s, showToast, diagnose]
   );
 
+  const flushStableProjectOrigin = useCallback(async (
+    request: number,
+    expected?: { projectPath: string | null; pagePath: string | null }
+  ) => {
+    const origin = expected ?? {
+      projectPath: s().project?.path ?? null,
+      pagePath: s().currentPage?.path ?? null,
+    };
+    while (request === projectLoadSeq.current) {
+      const current = s();
+      if ((current.project?.path ?? null) !== origin.projectPath ||
+          (current.currentPage?.path ?? null) !== origin.pagePath) return null;
+      if (!current.dirty || !current.currentPage || !current.pageState) {
+        return { ...origin, revision: current.documentRevision };
+      }
+      current.cancelScheduledSave();
+      await current.saveSnapshot(
+        current.currentPage.path,
+        current.pageState,
+        current.documentRevision
+      );
+      if (request !== projectLoadSeq.current) return null;
+      const after = s();
+      if ((after.project?.path ?? null) !== origin.projectPath ||
+          (after.currentPage?.path ?? null) !== origin.pagePath) return null;
+      if (!after.dirty) return { ...origin, revision: after.documentRevision };
+    }
+    return null;
+  }, [s]);
+
   const loadProject = useCallback(
     async (projectPath: string) => {
-      const name = projectPath.split(/[\\/]/).filter(Boolean).pop() ?? projectPath;
-      s().setProject({ path: projectPath, name });
-      setTerminalMounted(false);
-      s().setLeftTab('navigator');
-      s().setDevice('desktop');
-      window.avb.addRecent(projectPath);
-      const result = await rescan(projectPath);
-
-      const hasDeps = await window.avb.hasNodeModules(projectPath);
-      if (!hasDeps) {
-        try {
+      const request = ++projectLoadSeq.current;
+      try {
+        const stableOrigin = await flushStableProjectOrigin(request);
+        if (!stableOrigin || request !== projectLoadSeq.current) return;
+        const result = await window.avb.scanProject(projectPath);
+        if (request !== projectLoadSeq.current) return;
+        const hasDeps = await window.avb.hasNodeModules(projectPath);
+        if (request !== projectLoadSeq.current) return;
+        if (!hasDeps) {
           await window.avb.installDeps(projectPath);
-        } catch (err) {
+          if (request !== projectLoadSeq.current) return;
+        }
+        const first =
+          result.pages.find((p) => p.name === 'index.astro') || result.pages[0] || null;
+        const entry = first ? { ...first, kind: 'page' as const } : null;
+        const loaded = entry ? await window.avb.readPage(entry.path) : null;
+        if (request !== projectLoadSeq.current) return;
+        const finalOrigin = await flushStableProjectOrigin(request, stableOrigin);
+        if (!finalOrigin || request !== projectLoadSeq.current) return;
+        const ready = s();
+        if (ready.dirty || ready.documentRevision !== finalOrigin.revision ||
+            (ready.project?.path ?? null) !== finalOrigin.projectPath ||
+            (ready.currentPage?.path ?? null) !== finalOrigin.pagePath) return;
+
+        s().cancelScheduledSave();
+        navigationSeq.current += 1;
+        const name = projectPath.split(/[\\/]/).filter(Boolean).pop() ?? projectPath;
+        setState({
+          project: { path: projectPath, name },
+          scan: result,
+          currentPage: entry,
+          editStack: entry ? [entry] : [],
+          pageState: loaded ? { ...loaded, dirty: false } : null,
+          dirty: false,
+          saveError: null,
+          selectedId: null,
+          past: [],
+          future: [],
+          lastPush: 0,
+          lastKey: null,
+        });
+        setTerminalMounted(false);
+        s().setLeftTab('navigator');
+        s().setDevice('desktop');
+        window.avb.addRecent(projectPath);
+        window.avb
+          .listProjectClasses(projectPath)
+          .then((c: string[]) => request === projectLoadSeq.current && s().setProjectClasses(c || []))
+          .catch(() => {});
+        startPreview(projectPath, request);
+        window.avb.watchProject(projectPath);
+      } catch (err) {
+        if (request === projectLoadSeq.current) {
+          if (s().dirty) s().scheduleSave();
           showToast(cleanError(err), 'error');
         }
-        s().setBusy(null);
       }
-      startPreview(projectPath);
-      window.avb.watchProject(projectPath);
-
-      const first =
-        result.pages.find((p) => p.name === 'index.astro') || result.pages[0] || null;
-      if (first) selectPage(first);
     },
-    [s, rescan, startPreview] // eslint-disable-line react-hooks/exhaustive-deps
+    [s, startPreview, showToast, flushStableProjectOrigin]
   );
 
   // ----------------------------------------------------------------
@@ -332,63 +416,107 @@ export default function App() {
   // ----------------------------------------------------------------
 
   const flushSave = useCallback(async () => {
-    const { currentPage: page, pageState: state, dirty } = s();
+    const { currentPage: page, pageState: state, dirty, documentRevision } = s();
+    s().cancelScheduledSave();
     if (!page || !state || !dirty) return;
-    if (state.editable) {
-      await window.avb.writePage({ pagePath: page.path, model: state.model });
-    } else {
-      await window.avb.writePageRaw({ pagePath: page.path, source: state.source });
-    }
-    s().markClean();
+    await s().saveSnapshot(page.path, state, documentRevision);
   }, [s]);
 
   const openFile = useCallback(
-    async (entry: any) => {
+    async (entry: any, nextStack?: PageEntry[]) => {
+      const request = ++navigationSeq.current;
       await flushSave();
-      s().setCurrentPage(entry);
-      s().select(null);
       const result = await window.avb.readPage(entry.path);
+      if (request !== navigationSeq.current) return false;
+      s().setCurrentPage(entry);
       s().setPageState({ ...result, dirty: false });
+      if (nextStack) s().setEditStack(nextStack);
+      s().select(null);
       s().resetHistory();
+      return true;
     },
     [s, flushSave]
   );
 
   const selectPage = useCallback(
     async (page: any) => {
-      s().setEditStack([{ ...page, kind: 'page' }]);
-      await openFile({ ...page, kind: 'page' });
+      const entry = { ...page, kind: 'page' };
+      try {
+        await openFile(entry, [entry]);
+      } catch (err) {
+        showToast(cleanError(err), 'error');
+      }
     },
-    [s, openFile]
+    [openFile, showToast]
   );
 
   const reloadFromDisk = useCallback(async () => {
+    const suspended = s().suspendScheduledSave();
     const proj = s().project;
     const open = s().currentPage;
+    const startPath = open?.path ?? null;
+    const startRevision = s().documentRevision;
+    const unchanged = () =>
+      s().currentPage?.path === startPath && s().documentRevision === startRevision;
     if (!proj) return;
-    const result = await rescan(proj.path);
+    let result;
+    try {
+      result = await window.avb.scanProject(proj.path);
+    } catch (err) {
+      if (unchanged()) s().restoreScheduledSave(suspended);
+      throw err;
+    }
     if (!open) return;
     const stillThere =
       result.pages.some((p) => p.path === open.path) ||
       result.components.some((c) => c.path === open.path) ||
       result.layouts.some((l) => l.path === open.path);
     if (stillThere) {
-      const fresh = await window.avb.readPage(open.path);
+      let fresh;
+      try {
+        fresh = await window.avb.readPage(open.path);
+      } catch (err) {
+        if (unchanged()) s().restoreScheduledSave(suspended);
+        throw err;
+      }
+      if (!unchanged()) return;
+      s().cancelScheduledSave();
+      s().setScan(result);
       s().setPageState({ ...fresh, dirty: false });
       s().select(null);
       s().resetHistory();
     } else {
       const next = result.pages[0] || null;
-      s().setEditStack(next ? [{ ...next, kind: 'page' }] : []);
-      if (next) await openFile({ ...next, kind: 'page' });
+      if (next) {
+        const entry = { ...next, kind: 'page' };
+        let fresh;
+        try {
+          fresh = await window.avb.readPage(entry.path);
+        } catch (err) {
+          if (unchanged()) s().restoreScheduledSave(suspended);
+          throw err;
+        }
+        if (!unchanged()) return;
+        s().cancelScheduledSave();
+        s().setScan(result);
+        s().setCurrentPage(entry);
+        s().setPageState({ ...fresh, dirty: false });
+        s().setEditStack([entry]);
+        s().select(null);
+        s().resetHistory();
+      }
       else {
+        if (!unchanged()) return;
+        s().cancelScheduledSave();
+        s().setScan(result);
+        s().setEditStack([]);
         s().setCurrentPage(null);
         s().setPageState(null);
         s().select(null);
       }
     }
     s().refresh();
-  }, [s, rescan, openFile]);
+  }, [s]);
 
   const openComponent = useCallback(
     async (name: string, hostPath?: string) => {
@@ -411,9 +539,11 @@ export default function App() {
         path: comp.path,
         focusPath: focusPath ?? undefined,
       };
-      const prev = s().editStack;
-      s().setEditStack([...prev, entry]);
-      await openFile(entry);
+      try {
+        await openFile(entry, [...s().editStack, entry]);
+      } catch (err) {
+        showToast(cleanError(err), 'error');
+      }
     },
     [s, scan.components, scan.layouts, openFile, showToast]
   );
@@ -422,9 +552,12 @@ export default function App() {
     const stack = s().editStack;
     if (stack.length < 2) return;
     const next = stack.slice(0, -1);
-    s().setEditStack(next);
-    await openFile(next[next.length - 1]);
-  }, [s, openFile]);
+    try {
+      await openFile(next[next.length - 1], next);
+    } catch (err) {
+      showToast(cleanError(err), 'error');
+    }
+  }, [s, openFile, showToast]);
 
   // ----------------------------------------------------------------
   // Undo / redo / mutations — delegated to the store.
@@ -461,6 +594,7 @@ export default function App() {
       if (!affectsPage) return;
 
       if (!scanResult.pages.some((p) => p.path === page.path)) {
+        s().cancelScheduledSave();
         s().setCurrentPage(null);
         s().setPageState(null);
         s().select(null);
@@ -471,6 +605,7 @@ export default function App() {
 
       let result;
       try {
+        s().cancelScheduledSave();
         result = await window.avb.readPage(page.path);
       } catch {
         return;
@@ -1427,6 +1562,7 @@ export default function App() {
         const next = result.pages[0] || null;
         if (next) selectPage(next);
         else {
+          s().cancelScheduledSave();
           s().setCurrentPage(null);
           s().setPageState(null);
         }
@@ -1509,6 +1645,7 @@ export default function App() {
           const next = result.pages[0] || null;
           if (next) selectPage(next);
           else {
+            s().cancelScheduledSave();
             s().setCurrentPage(null);
             s().setPageState(null);
           }

@@ -4,8 +4,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
+import { I18nProvider } from './i18n/I18nContext.jsx';
+import { getState } from './store/index.ts';
 
-const harness = vi.hoisted(() => ({ menu: new Map() }));
+const harness = vi.hoisted(() => ({ menu: new Map(), gitChipProps: null }));
 
 class ResizeObserverStub {
   observe() {}
@@ -26,7 +28,12 @@ vi.mock('./panels/TerminalPanel.jsx', () => ({ default: () => null }));
 vi.mock('./panels/PreviewPane.tsx', () => ({
   default: () => <div className="preview-frame-wrap" />,
 }));
-vi.mock('./panels/GitChip.jsx', () => ({ default: () => null }));
+vi.mock('./panels/GitChip.jsx', () => ({
+  default: (props) => {
+    harness.gitChipProps = props;
+    return null;
+  },
+}));
 
 function makeModel() {
   return {
@@ -78,12 +85,13 @@ function setupAvb() {
 }
 
 async function openProjectWithPage() {
-  render(<App />);
+  const view = render(<I18nProvider><App /></I18nProvider>);
   fireEvent.click(screen.getByRole('button', { name: 'Open project' }));
   await screen.findByTitle('Dev server: on');
   fireEvent.click(await screen.findByText('section'));
   fireEvent.click(screen.getByRole('button', { name: /settings/i }));
   await screen.findByText('hero');
+  return view;
 }
 
 async function openAttrEditor() {
@@ -95,6 +103,7 @@ describe('App save scheduling', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     harness.menu.clear();
+    harness.gitChipProps = null;
     setupAvb();
   });
   afterEach(() => {
@@ -134,5 +143,131 @@ describe('App save scheduling', () => {
     await openProjectWithPage();
     await vi.advanceTimersByTimeAsync(1000);
     expect(writePage).not.toHaveBeenCalled();
+  });
+
+  it('keeps the document dirty when a synchronous flush rejects', async () => {
+    await openProjectWithPage();
+    const field = await openAttrEditor();
+    fireEvent.change(field, { target: { value: 'unsaved' } });
+    writePage.mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(harness.gitChipProps.flushSave()).rejects.toThrow('disk full');
+
+    expect(harness.gitChipProps.project.path).toBe('/projects/one');
+    const { dirty, pageState } = getState();
+    expect(dirty).toBe(true);
+    expect(pageState.dirty).toBe(true);
+  });
+
+  it('cancels a pending save when reloading the current document from disk', async () => {
+    await openProjectWithPage();
+    const field = await openAttrEditor();
+    fireEvent.change(field, { target: { value: 'discard me' } });
+    let resolveRead;
+    const deferredRead = new Promise((resolve) => { resolveRead = resolve; });
+    window.avb.readPage.mockImplementationOnce(() => deferredRead);
+
+    const reload = harness.gitChipProps.onWorktreeChanged();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(writePage).not.toHaveBeenCalled();
+    resolveRead({ editable: true, model: makeModel(), source: '' });
+    await reload;
+
+    expect(writePage).not.toHaveBeenCalled();
+    expect(getState().dirty).toBe(false);
+    expect(getState().pageState.model.nodes[0].props.id.value).toBe('hero');
+  });
+
+  it('cancels a pending save when reload discovers the current file was removed', async () => {
+    await openProjectWithPage();
+    const field = await openAttrEditor();
+    fireEvent.change(field, { target: { value: 'discard me' } });
+    let resolveScan;
+    window.avb.scanProject.mockImplementationOnce(() =>
+      new Promise((resolve) => { resolveScan = resolve; })
+    );
+
+    const reload = harness.gitChipProps.onWorktreeChanged();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(writePage).not.toHaveBeenCalled();
+    resolveScan({ pages: [], layouts: [], components: [] });
+    await reload;
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(writePage).not.toHaveBeenCalled();
+    expect(getState().currentPage).toBeNull();
+    expect(getState().pageState).toBeNull();
+  });
+
+  it('preserves the captured origin save when unmounted during the debounce', async () => {
+    const { unmount } = await openProjectWithPage();
+    const field = await openAttrEditor();
+    fireEvent.change(field, { target: { value: 'survive unmount' } });
+
+    unmount();
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(writePage).toHaveBeenCalledTimes(1);
+    expect(writePage.mock.calls[0][0].pagePath).toBe('/projects/one/src/pages/index.astro');
+    expect(writePage.mock.calls[0][0].model.nodes[0].props.id.value).toBe('survive unmount');
+  });
+
+  it('keeps a pending origin save when reload fails before replacement', async () => {
+    await openProjectWithPage();
+    const field = await openAttrEditor();
+    fireEvent.change(field, { target: { value: 'survive reload failure' } });
+    let rejectRead;
+    window.avb.readPage.mockImplementationOnce(() =>
+      new Promise((_, reject) => { rejectRead = reject; })
+    );
+
+    const reload = harness.gitChipProps.onWorktreeChanged();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(writePage).not.toHaveBeenCalled();
+    rejectRead(new Error('read failed'));
+    await expect(reload).rejects.toThrow('read failed');
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(writePage).toHaveBeenCalledTimes(1);
+    expect(writePage.mock.calls[0][0].model.nodes[0].props.id.value).toBe('survive reload failure');
+  });
+
+  it('does not overwrite an edit made while a successful reload read is pending', async () => {
+    await openProjectWithPage();
+    let resolveRead;
+    window.avb.readPage.mockImplementationOnce(() =>
+      new Promise((resolve) => { resolveRead = resolve; })
+    );
+    const reload = harness.gitChipProps.onWorktreeChanged();
+    await vi.advanceTimersByTimeAsync(1);
+
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'newest edit' }));
+    await vi.advanceTimersByTimeAsync(300);
+    resolveRead({ editable: true, model: makeModel(), source: '' });
+    await reload;
+
+    expect(writePage).toHaveBeenCalledTimes(1);
+    expect(writePage.mock.calls[0][0].model.extraFrontmatter).toBe('newest edit');
+    expect(getState().pageState.model.extraFrontmatter).toBe('newest edit');
+  });
+
+  it('does not restore an older suspended save over an edit made during failed reload', async () => {
+    await openProjectWithPage();
+    let rejectRead;
+    window.avb.readPage.mockImplementationOnce(() =>
+      new Promise((_, reject) => { rejectRead = reject; })
+    );
+    const reload = harness.gitChipProps.onWorktreeChanged();
+    await vi.advanceTimersByTimeAsync(1);
+
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'newest edit' }));
+    await vi.advanceTimersByTimeAsync(300);
+    rejectRead(new Error('read failed'));
+    await expect(reload).rejects.toThrow('read failed');
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(writePage).toHaveBeenCalledTimes(1);
+    expect(writePage.mock.calls[0][0].model.extraFrontmatter).toBe('newest edit');
+    expect(getState().pageState.model.extraFrontmatter).toBe('newest edit');
   });
 });

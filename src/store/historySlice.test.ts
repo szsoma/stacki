@@ -16,6 +16,11 @@ function seeded() {
   return store;
 }
 
+function expectDirty(store: ReturnType<typeof createAppStore>) {
+  expect(store.getState().dirty).toBe(true);
+  expect(store.getState().pageState?.dirty).toBe(true);
+}
+
 describe('historySlice', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -51,6 +56,33 @@ describe('historySlice', () => {
     vi.advanceTimersByTime(10);
     store.getState().pushHistory('prop:n1:class');
     expect(store.getState().past).toHaveLength(2);
+  });
+
+  it('keeps global and document dirty state aligned after undo and redo', () => {
+    const store = seeded();
+    store.getState().pushHistory();
+    store.getState().setPageState({ editable: true, model: model('b'), dirty: true });
+    store.getState().markClean();
+    store.getState().undo();
+    expectDirty(store);
+    store.getState().markClean();
+    store.getState().redo();
+    expectDirty(store);
+  });
+
+  it('schedules persistence after undo and redo', async () => {
+    const store = seeded();
+    store.getState().setCurrentPage({ name: 'index', path: '/project/index.astro' });
+    window.avb = { writePage: vi.fn(async () => {}), writePageRaw: vi.fn() } as any;
+    store.getState().pushHistory();
+    store.getState().setPageState({ editable: true, model: model('b'), dirty: true });
+
+    store.getState().undo();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(vi.mocked(window.avb.writePage).mock.calls[0][0].model.nodes[0].props.id.value).toBe('a');
+    store.getState().redo();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(vi.mocked(window.avb.writePage).mock.calls[1][0].model.nodes[0].props.id.value).toBe('b');
   });
 
   it('caps past at 100 entries, dropping the oldest', () => {

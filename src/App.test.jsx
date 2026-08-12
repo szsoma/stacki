@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App.jsx';
 import { I18nProvider } from './i18n/I18nContext.jsx';
+import { getState } from './store/index.ts';
 
 const harness = vi.hoisted(() => ({
   menu: new Map(),
@@ -134,6 +135,7 @@ function setupComponentPage() {
   const pagePath = '/projects/one/src/pages/index.astro';
   const aboutPath = '/projects/one/src/components/About.astro';
   const cardPath = '/projects/one/src/components/Card.astro';
+  const eyebrowPath = '/projects/one/src/components/Eyebrow.astro';
   const models = new Map([
     [pagePath, {
       imports: [],
@@ -147,6 +149,7 @@ function setupComponentPage() {
         id: 'about-section', kind: 'element', name: 'section', props: {}, children: [
           { id: 'about-heading', kind: 'element', name: 'h2', props: {}, children: [] },
           { id: 'card-host', kind: 'component', name: 'Card', props: {}, children: [] },
+          { id: 'eyebrow-host', kind: 'component', name: 'Eyebrow', props: {}, children: [] },
         ],
       }],
     }],
@@ -159,6 +162,11 @@ function setupComponentPage() {
         ],
       }],
     }],
+    [eyebrowPath, {
+      imports: [],
+      extraFrontmatter: '',
+      nodes: [{ id: 'eyebrow-text', kind: 'element', name: 'span', props: {}, children: [] }],
+    }],
   ]);
 
   window.avb.scanProject.mockResolvedValue({
@@ -167,6 +175,7 @@ function setupComponentPage() {
     components: [
       { path: aboutPath, name: 'About' },
       { path: cardPath, name: 'Card' },
+      { path: eyebrowPath, name: 'Eyebrow' },
     ],
   });
   window.avb.readPage.mockImplementation(async (path) => ({
@@ -467,6 +476,383 @@ describe('App terminal integration', () => {
       expect(harness.previewPaneProps.activeScope).toBe('src/pages/index.astro');
       expect(harness.previewPaneProps.overlayInfo('0')).not.toBeNull();
     });
+  });
+
+  it('does not write clean component models while navigating into and out of nested views', async () => {
+    setupComponentPage();
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onOpenNode).toEqual(expect.any(Function)));
+    expect(getState().dirty).toBe(false);
+
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => {
+      expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro');
+      expect(harness.previewPaneProps.overlayInfo('0.2')).not.toBeNull();
+    });
+    expect(getState().dirty).toBe(false);
+
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/components/About.astro', path: '0.2', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => {
+      expect(harness.previewPaneProps.activeScope).toBe('src/components/Eyebrow.astro');
+      expect(harness.previewPaneProps.overlayInfo('0')).not.toBeNull();
+    });
+    expect(getState().dirty).toBe(false);
+
+    fireEvent.click(screen.getByTitle('Back (Esc)'));
+    await waitFor(() => expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro'));
+    fireEvent.click(screen.getByTitle('Back (Esc)'));
+    await waitFor(() => expect(harness.previewPaneProps.activeScope).toBe('src/pages/index.astro'));
+
+    expect(window.avb.writePage).not.toHaveBeenCalled();
+    expect(window.avb.writePageRaw).not.toHaveBeenCalled();
+    expect(getState().dirty).toBe(false);
+  });
+
+  it('flushes a dirty origin before navigation and cancels its stale scheduled save', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      setupComponentPage();
+      await openProject();
+      await waitFor(() => expect(harness.previewPaneProps?.onOpenNode).toEqual(expect.any(Function)));
+
+      getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'const edited = true;' }));
+      expect(getState().dirty).toBe(true);
+      act(() => harness.previewPaneProps.onOpenNode({
+        scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+      }));
+
+      await waitFor(() => expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro'));
+      expect(window.avb.writePage).toHaveBeenCalledTimes(1);
+      expect(window.avb.writePage).toHaveBeenCalledWith(expect.objectContaining({
+        pagePath: '/projects/one/src/pages/index.astro',
+        model: expect.objectContaining({ extraFrontmatter: 'const edited = true;' }),
+      }));
+
+      await vi.advanceTimersByTimeAsync(500);
+      expect(window.avb.writePage).toHaveBeenCalledTimes(1);
+      expect(window.avb.writePage.mock.calls.some(([call]) =>
+        call.pagePath === '/projects/one/src/components/About.astro')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the origin document and stack when opening a component cannot flush', async () => {
+    setupComponentPage();
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onOpenNode).toEqual(expect.any(Function)));
+    const originStack = getState().editStack;
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'unsaved' }));
+    window.avb.writePage.mockRejectedValueOnce(new Error('disk full'));
+
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+
+    await waitFor(() => expect(window.avb.writePage).toHaveBeenCalledTimes(1));
+    expect(harness.previewPaneProps.activeScope).toBe('src/pages/index.astro');
+    expect(getState().currentPage.path).toBe('/projects/one/src/pages/index.astro');
+    expect(getState().editStack).toEqual(originStack);
+    expect(getState().dirty).toBe(true);
+  });
+
+  it('keeps the origin document and stack when selecting a page cannot read the destination', async () => {
+    setupSelectablePage();
+    window.avb.scanProject.mockResolvedValue({
+      pages: [
+        { path: '/projects/one/src/pages/index.astro', name: 'index.astro', route: '/' },
+        { path: '/projects/one/src/pages/other.astro', name: 'other.astro', route: '/other' },
+      ],
+      layouts: [],
+      components: [],
+    });
+    await openProject();
+    const originStack = getState().editStack;
+    window.avb.readPage.mockRejectedValueOnce(new Error('cannot read'));
+
+    fireEvent.click(screen.getByTitle('Switch page'));
+    fireEvent.click(await screen.findByText('other'));
+
+    await waitFor(() => expect(window.avb.readPage).toHaveBeenCalledWith('/projects/one/src/pages/other.astro'));
+    expect(harness.previewPaneProps.activeScope).toBe('src/pages/index.astro');
+    expect(getState().currentPage.path).toBe('/projects/one/src/pages/index.astro');
+    expect(getState().editStack).toEqual(originStack);
+  });
+
+  it('flushes the old project before switching and leaves it intact when that flush fails', async () => {
+    setupSelectablePage();
+    await openProject();
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'old project edit' }));
+
+    await act(async () => { await harness.openProject('/projects/two'); });
+    expect(window.avb.writePage).toHaveBeenCalledWith(expect.objectContaining({
+      pagePath: '/projects/one/src/pages/index.astro',
+      model: expect.objectContaining({ extraFrontmatter: 'old project edit' }),
+    }));
+    expect(getState().project.path).toBe('/projects/two');
+
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'blocked switch' }));
+    window.avb.writePage.mockRejectedValueOnce(new Error('disk full'));
+    const origin = {
+      project: getState().project,
+      currentPage: getState().currentPage,
+      editStack: getState().editStack,
+    };
+    await act(async () => { await harness.openProject('/projects/three'); });
+    expect(getState().project).toEqual(origin.project);
+    expect(getState().currentPage).toEqual(origin.currentPage);
+    expect(getState().editStack).toEqual(origin.editStack);
+    expect(getState().dirty).toBe(true);
+  });
+
+  it('switches a clean project without writing its current document', async () => {
+    setupSelectablePage();
+    await openProject();
+
+    await act(async () => { await harness.openProject('/projects/two'); });
+
+    expect(window.avb.writePage).not.toHaveBeenCalled();
+    expect(window.avb.writePageRaw).not.toHaveBeenCalled();
+    expect(getState().project.path).toBe('/projects/two');
+    expect(getState().dirty).toBe(false);
+  });
+
+  it('rolls back the complete project load when discovery or candidate read fails', async () => {
+    setupSelectablePage();
+    await openProject();
+    const origin = {
+      project: getState().project,
+      currentPage: getState().currentPage,
+      editStack: getState().editStack,
+      pageState: getState().pageState,
+    };
+
+    window.avb.scanProject.mockRejectedValueOnce(new Error('scan failed'));
+    await act(async () => { await harness.openProject('/projects/bad-scan'); });
+    expect(getState().project).toEqual(origin.project);
+    expect(getState().currentPage).toEqual(origin.currentPage);
+    expect(getState().editStack).toEqual(origin.editStack);
+    expect(getState().pageState).toEqual(origin.pageState);
+
+    window.avb.scanProject.mockResolvedValueOnce({
+      pages: [{ path: '/projects/bad-read/src/pages/index.astro', name: 'index.astro', route: '/' }],
+      layouts: [], components: [],
+    });
+    window.avb.readPage.mockRejectedValueOnce(new Error('read failed'));
+    await act(async () => { await harness.openProject('/projects/bad-read'); });
+    expect(getState().project).toEqual(origin.project);
+    expect(getState().currentPage).toEqual(origin.currentPage);
+    expect(getState().editStack).toEqual(origin.editStack);
+    expect(getState().pageState).toEqual(origin.pageState);
+  });
+
+  it('lets only the latest concurrent project load commit and start services', async () => {
+    setupSelectablePage();
+    await openProject();
+    let resolveSlow;
+    let resolveFast;
+    window.avb.scanProject.mockImplementation((path) => {
+      if (path === '/projects/slow') {
+        return new Promise((resolve) => { resolveSlow = resolve; });
+      }
+      if (path === '/projects/fast') {
+        return new Promise((resolve) => { resolveFast = resolve; });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+    window.avb.readPage.mockImplementation(async (path) => ({
+      editable: true,
+      model: { imports: [], extraFrontmatter: path, nodes: [] },
+      source: '',
+    }));
+
+    const slow = harness.openProject('/projects/slow');
+    await waitFor(() => expect(resolveSlow).toEqual(expect.any(Function)));
+    const fast = harness.openProject('/projects/fast');
+    await waitFor(() => expect(resolveFast).toEqual(expect.any(Function)));
+    resolveFast({
+      pages: [{ path: '/projects/fast/src/pages/index.astro', name: 'index.astro', route: '/' }],
+      layouts: [], components: [],
+    });
+    await act(async () => { await fast; });
+    resolveSlow({
+      pages: [{ path: '/projects/slow/src/pages/index.astro', name: 'index.astro', route: '/' }],
+      layouts: [], components: [],
+    });
+    await act(async () => { await slow; });
+
+    expect(getState().project.path).toBe('/projects/fast');
+    expect(getState().currentPage.path).toBe('/projects/fast/src/pages/index.astro');
+    expect(getState().editStack.at(-1).path).toBe('/projects/fast/src/pages/index.astro');
+    expect(window.avb.watchProject).toHaveBeenCalledWith('/projects/fast');
+    expect(window.avb.watchProject).not.toHaveBeenCalledWith('/projects/slow');
+    expect(window.avb.startDevServer).toHaveBeenCalledWith('/projects/fast');
+    expect(window.avb.startDevServer).not.toHaveBeenCalledWith('/projects/slow');
+  });
+
+  it('flushes an edit made during candidate read before committing the project switch', async () => {
+    setupSelectablePage();
+    await openProject();
+    window.avb.scanProject.mockResolvedValueOnce({
+      pages: [{ path: '/projects/two/src/pages/index.astro', name: 'index.astro', route: '/' }],
+      layouts: [], components: [],
+    });
+    let resolveCandidate;
+    window.avb.readPage.mockImplementationOnce(() =>
+      new Promise((resolve) => { resolveCandidate = resolve; })
+    );
+    let resolveFirstWrite;
+    window.avb.writePage.mockImplementationOnce(() =>
+      new Promise((resolve) => { resolveFirstWrite = resolve; })
+    );
+
+    const switching = harness.openProject('/projects/two');
+    await waitFor(() => expect(window.avb.readPage).toHaveBeenCalledWith('/projects/two/src/pages/index.astro'));
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'edit during load' }));
+    resolveCandidate({
+      editable: true,
+      model: { imports: [], extraFrontmatter: 'destination', nodes: [] },
+      source: '',
+    });
+    await waitFor(() => expect(window.avb.writePage).toHaveBeenCalledTimes(1));
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'newest precommit edit' }));
+    resolveFirstWrite();
+    await act(async () => { await switching; });
+
+    expect(window.avb.writePage).toHaveBeenCalledTimes(2);
+    expect(window.avb.writePage).toHaveBeenLastCalledWith(expect.objectContaining({
+      pagePath: '/projects/one/src/pages/index.astro',
+      model: expect.objectContaining({ extraFrontmatter: 'newest precommit edit' }),
+    }));
+    expect(getState().project.path).toBe('/projects/two');
+    expect(getState().currentPage.path).toBe('/projects/two/src/pages/index.astro');
+  });
+
+  it('loops the initial project-switch flush until the newest origin revision is saved', async () => {
+    setupSelectablePage();
+    await openProject();
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'first edit' }));
+    window.avb.scanProject.mockResolvedValueOnce({
+      pages: [{ path: '/projects/two/src/pages/index.astro', name: 'index.astro', route: '/' }],
+      layouts: [], components: [],
+    });
+    let resolveFirstWrite;
+    window.avb.writePage.mockImplementationOnce(() =>
+      new Promise((resolve) => { resolveFirstWrite = resolve; })
+    );
+
+    const switching = harness.openProject('/projects/two');
+    await waitFor(() => expect(window.avb.writePage).toHaveBeenCalledTimes(1));
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'newest initial edit' }));
+    resolveFirstWrite();
+    await act(async () => { await switching; });
+
+    expect(window.avb.writePage).toHaveBeenCalledTimes(2);
+    expect(window.avb.writePage).toHaveBeenLastCalledWith(expect.objectContaining({
+      pagePath: '/projects/one/src/pages/index.astro',
+      model: expect.objectContaining({ extraFrontmatter: 'newest initial edit' }),
+    }));
+    expect(getState().project.path).toBe('/projects/two');
+    expect(getState().dirty).toBe(false);
+  });
+
+  it('ignores a stale preview start completion from an older committed project', async () => {
+    setupSelectablePage();
+    await openProject();
+    window.avb.scanProject.mockImplementation(async (path) => ({
+      pages: [{ path: `${path}/src/pages/index.astro`, name: 'index.astro', route: '/' }],
+      layouts: [], components: [],
+    }));
+    window.avb.readPage.mockResolvedValue({
+      editable: true,
+      model: { imports: [], extraFrontmatter: '', nodes: [] },
+      source: '',
+    });
+    let resolveA;
+    let resolveB;
+    window.avb.startDevServer.mockImplementation((path) => {
+      if (path === '/projects/a') return new Promise((resolve) => { resolveA = resolve; });
+      if (path === '/projects/b') return new Promise((resolve) => { resolveB = resolve; });
+      return Promise.resolve({ url: 'http://localhost:4321', external: false });
+    });
+
+    await act(async () => { await harness.openProject('/projects/a'); });
+    await act(async () => { await harness.openProject('/projects/b'); });
+    resolveB({ url: 'http://localhost:5002', external: false });
+    await waitFor(() => expect(getState().devUrl).toBe('http://localhost:5002'));
+    resolveA({ url: 'http://localhost:5001', external: false });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(getState().project.path).toBe('/projects/b');
+    expect(getState().devUrl).toBe('http://localhost:5002');
+    expect(getState().devStatus).toBe('on');
+  });
+
+  it('lets only the latest concurrent page navigation commit', async () => {
+    setupSelectablePage();
+    window.avb.scanProject.mockResolvedValue({
+      pages: [
+        { path: '/projects/one/src/pages/index.astro', name: 'index.astro', route: '/' },
+        { path: '/projects/one/src/pages/two.astro', name: 'two.astro', route: '/two' },
+        { path: '/projects/one/src/pages/three.astro', name: 'three.astro', route: '/three' },
+      ],
+      layouts: [], components: [],
+    });
+    await openProject();
+    let resolveTwo;
+    let resolveThree;
+    const twoRead = new Promise((resolve) => { resolveTwo = resolve; });
+    const threeRead = new Promise((resolve) => { resolveThree = resolve; });
+    window.avb.readPage
+      .mockImplementationOnce(() => twoRead)
+      .mockImplementationOnce(() => threeRead);
+
+    fireEvent.click(screen.getByTitle('Switch page'));
+    fireEvent.click(await screen.findByText('two'));
+    fireEvent.click(screen.getByTitle('Switch page'));
+    fireEvent.click(await screen.findByText('three'));
+    await waitFor(() => expect(window.avb.readPage).toHaveBeenCalledWith('/projects/one/src/pages/three.astro'));
+
+    await act(async () => resolveThree({
+      editable: true,
+      model: { imports: [], extraFrontmatter: 'three', nodes: [] },
+      source: '',
+    }));
+    await waitFor(() => expect(getState().currentPage.path).toBe('/projects/one/src/pages/three.astro'));
+    await act(async () => resolveTwo({
+      editable: true,
+      model: { imports: [], extraFrontmatter: 'two', nodes: [] },
+      source: '',
+    }));
+
+    expect(getState().currentPage.path).toBe('/projects/one/src/pages/three.astro');
+    expect(getState().pageState.model.extraFrontmatter).toBe('three');
+    expect(getState().editStack.at(-1).path).toBe('/projects/one/src/pages/three.astro');
+  });
+
+  it('keeps the component and stack when Back cannot flush its dirty model', async () => {
+    setupComponentPage();
+    await openProject();
+    await waitFor(() => expect(harness.previewPaneProps?.onOpenNode).toEqual(expect.any(Function)));
+    act(() => harness.previewPaneProps.onOpenNode({
+      scope: 'src/pages/index.astro', path: '0', pagePath: '0', occurrence: 0,
+    }));
+    await waitFor(() => expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro'));
+    const originStack = getState().editStack;
+    getState().mutateModel((model) => ({ ...model, extraFrontmatter: 'unsaved about' }));
+    window.avb.writePage.mockRejectedValueOnce(new Error('disk full'));
+
+    fireEvent.click(screen.getByTitle('Back (Esc)'));
+
+    await waitFor(() => expect(window.avb.writePage).toHaveBeenCalledTimes(1));
+    expect(harness.previewPaneProps.activeScope).toBe('src/components/About.astro');
+    expect(getState().currentPage.path).toBe('/projects/one/src/components/About.astro');
+    expect(getState().editStack).toEqual(originStack);
+    expect(getState().dirty).toBe(true);
   });
 
   it('routes native copy and paste to a focused terminal and preserves field behavior outside it', async () => {

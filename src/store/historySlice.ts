@@ -67,6 +67,7 @@ export const createHistorySlice: StateCreator<
       lastPush: 0,
     });
     applySnapshot(set, get, entry);
+    get().scheduleSave();
   },
 
   redo: () => {
@@ -80,6 +81,7 @@ export const createHistorySlice: StateCreator<
       lastPush: 0,
     });
     applySnapshot(set, get, entry);
+    get().scheduleSave();
   },
 
   resetHistory: () => set({ past: [], future: [], lastPush: 0, lastKey: null }),
@@ -102,12 +104,18 @@ function applySnapshot(
         model: structuredClone(entry.model),
         dirty: true,
       } as PageState,
+      dirty: true,
+      documentRevision: get().documentRevision + 1,
     });
     const id = get().selectedId;
     if (id && id !== 'layout' && !findNodeById(entry.model.nodes ?? [], id)) {
       set({ selectedId: null });
     }
   } else {
-    set({ pageState: { ...current, source: entry.source, dirty: true } as PageState });
+    set({
+      pageState: { ...current, source: entry.source, dirty: true } as PageState,
+      dirty: true,
+      documentRevision: get().documentRevision + 1,
+    });
   }
 }
