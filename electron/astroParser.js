@@ -35,6 +35,22 @@ const RAW_ELEMENTS = new Set(['style', 'script']);
 let nextId = 1;
 const makeId = () => `n${nextId++}`;
 
+/**
+ * Returns the canonical project-relative scope used by preview markers.
+ * @param {string} projectPath
+ * @param {string} filePath
+ * @returns {string | null}
+ */
+function previewScopeFromFile(projectPath, filePath) {
+  const projectRoot = path.resolve(projectPath);
+  const file = path.resolve(filePath);
+  const relative = path.relative(projectRoot, file);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return null;
+  }
+  return relative.replace(/\\/g, '/');
+}
+
 // ---------------------------------------------------------------------------
 // Attribute (prop) parsing
 // ---------------------------------------------------------------------------
@@ -505,14 +521,24 @@ function serializeNode(node, indent, lines) {
 // path and the dev plugin marks the chunk module itself. Passing it through
 // the id (rather than a side map) also keys Vite's cache: move the Fragment
 // and the chunk module's id changes with it.
-/** @param {PageModel} model @returns {string} */
-function serializePageMarked(model) {
+/** @param {string} value @returns {string} */
+function escapeMarkerAttribute(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/** @param {'s'|'e'} edge @param {string} markerPath @param {string} scope @param {string} slotAttr @returns {string} */
+function markerBoundary(edge, markerPath, scope, slotAttr = '') {
+  return `<template${slotAttr} data-avb-${edge}="${markerPath}" data-avb-scope="${escapeMarkerAttribute(scope)}"></template>`;
+}
+
+/** @param {PageModel} model @param {string} scope @returns {string} */
+function serializePageMarked(model, scope) {
   const marks = chunkImportMarks(model);
   const lines = ['---'];
   for (const imp of model.imports) {
     const mark = /\.html\?raw$/i.test(imp.path) ? marks.get(imp.name) : null;
     const spec = mark
-      ? `${imp.path}&avb=${mark.path}${mark.group ? '&avbg=1' : ''}`
+      ? `${imp.path}&avb=${mark.path}&avbs=${encodeURIComponent(scope)}${mark.group ? '&avbg=1' : ''}`
       : imp.path;
     lines.push(`import ${imp.name} from '${spec}';`);
   }
@@ -520,12 +546,12 @@ function serializePageMarked(model) {
     lines.push('', model.extraFrontmatter);
   }
   lines.push('---');
-  model.nodes.forEach((node, i) => serializeNodeMarked(node, '', lines, String(i)));
+  model.nodes.forEach((node, i) => serializeNodeMarked(node, '', lines, String(i), scope));
   return lines.join('\n') + '\n';
 }
 
-/** @param {AstroNode} node @param {number|string} indent @param {string[]} lines @param {string} path @returns {void} */
-function serializeNodeMarked(node, indent, lines, path) {
+/** @param {AstroNode} node @param {number|string} indent @param {string[]} lines @param {string} path @param {string} scope @returns {void} */
+function serializeNodeMarked(node, indent, lines, path, scope) {
   if (node.kind === 'chunk-group') return; // synthetic, not in page source
   // A slotted node's markers must go into the same named slot, or they'd
   // land in the default slot while the node renders elsewhere.
@@ -536,7 +562,7 @@ function serializeNodeMarked(node, indent, lines, path) {
   const slotVal = n.props?.slot;
   const slotAttr =
     slotVal && slotVal.type === 'string' && slotVal.value ? ` slot="${slotVal.value}"` : '';
-  lines.push(`${indent}<template${slotAttr} data-avb-s="${path}"></template>`);
+  lines.push(`${indent}${markerBoundary('s', path, scope, slotAttr)}`);
   if (
     (n.kind === 'component' || n.kind === 'element') &&
     !n.chunkFile &&
@@ -547,7 +573,7 @@ function serializeNodeMarked(node, indent, lines, path) {
     const attrs = serializeAttrs(n.props);
     lines.push(`${indent}<${n.name}${attrs}>`);
     n.children.forEach((child, i) =>
-      serializeNodeMarked(child, indent + '  ', lines, `${path}.${i}`)
+      serializeNodeMarked(child, indent + '  ', lines, `${path}.${i}`, scope)
     );
     lines.push(`${indent}</${n.name}>`);
   } else if (node.kind === 'map') {
@@ -556,14 +582,14 @@ function serializeNodeMarked(node, indent, lines, path) {
     lines.push(indent + '{');
     lines.push(indent + '  ' + node.head);
     (node.children || []).forEach((child, i) =>
-      serializeNodeMarked(child, indent + '    ', lines, `${path}.${i}`)
+      serializeNodeMarked(child, indent + '    ', lines, `${path}.${i}`, scope)
     );
     lines.push(indent + '  ))');
     lines.push(indent + '}');
   } else {
     serializeNode(node, indent, lines);
   }
-  lines.push(`${indent}<template${slotAttr} data-avb-e="${path}"></template>`);
+  lines.push(`${indent}${markerBoundary('e', path, scope, slotAttr)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -840,15 +866,15 @@ function chunkImportMarks(model) {
 // chunk nodes address identically to the app's tree. A group also gets a
 // marker pair of its own — nothing in the page wraps it. Returns null when
 // the chunk isn't representable, so the caller can serve it unmarked.
-/** @param {string} source @param {string} prefix @param {string} group @returns {string | null} */
-function markChunkHtml(source, prefix, group) {
+/** @param {string} source @param {string} prefix @param {boolean} group @param {string} scope @returns {string | null} */
+function markChunkHtml(source, prefix, group, scope) {
   const { nodes, clean } = parseTemplate(source);
   if (!clean) return null;
   /** @type {string[]} */
   const lines = [];
-  if (group) lines.push(`<template data-avb-s="${prefix}"></template>`);
-  nodes.forEach((node, i) => serializeNodeMarked(node, '', lines, `${prefix}.${i}`));
-  if (group) lines.push(`<template data-avb-e="${prefix}"></template>`);
+  if (group) lines.push(markerBoundary('s', prefix, scope));
+  nodes.forEach((node, i) => serializeNodeMarked(node, '', lines, `${prefix}.${i}`, scope));
+  if (group) lines.push(markerBoundary('e', prefix, scope));
   return lines.join('\n') + '\n';
 }
 
@@ -860,6 +886,7 @@ module.exports = {
   serializeNodes,
   resolveChunks,
   markChunkHtml,
+  previewScopeFromFile,
   parsePropSchema,
   parseExtendsTag,
   parseSlots,
